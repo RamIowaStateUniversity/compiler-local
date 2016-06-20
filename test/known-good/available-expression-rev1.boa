@@ -1,0 +1,180 @@
+m: output collection[string][int] of string;
+p: Project = input;
+
+# program analysis output
+type T= {gen: set of string, kill: string, avail: set of string};
+
+#all expression set
+allExprset: set of string;
+
+# cfg of the current method
+cfg: CFG;
+
+# generated expression set
+genset: set of string;
+
+# current visiting cfg node
+cur_cfg_node:CFGNode;
+
+#killed variables
+varkilled: string;
+
+method_name : string;
+#temporary variable string
+str:string;
+
+# parse node expression to construct the postfix expression
+node_expr := visitor {
+	before node: Expression -> {
+		switch (node.kind) {
+			case ExpressionKind.LT:
+				str=str+"<"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.OP_ADD:
+				str=str+"+"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.OP_INC:
+				str=str+"++"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.ASSIGN:
+				foreach(j:int;def(node.expressions[j])) {
+					if(j!=0) {
+						visit(node.expressions[j]);
+					}
+				}
+				break;
+			case ExpressionKind.VARACCESS:
+				str=str+node.variable;
+				break;
+			case ExpressionKind.VARDECL:
+				visit(node.variable_decls[0].initializer);
+				break;
+			case ExpressionKind.LITERAL:
+				str=str+node.literal;
+				break;
+			default:break;
+		}
+		stop;
+	}
+};
+
+# traversal to compute genset of each node
+allExprTraversal := traversal(node: CFGNode): T {
+	cur_value : T;
+	init_set : set of string;
+	genset = init_set;
+	str="";
+	if(def(node.expression)) {
+		visit(node.expression, node_expr);
+		if(str!="") {
+			add(allExprset, str);
+			add(genset, str);
+		}
+	}
+	init_set1 : set of string;
+	cur_value = {genset, "", init_set1};
+	return cur_value;
+};
+
+# traversal that initializes avail set of all nodes
+avail_init := traversal(node: CFGNode): T {
+	cur_value := getValue(node);
+	if(node.id!=0) {
+		cur_value.avail = allExprset;
+	}
+	return cur_value;
+};
+
+# parse node expression to see if a variable is defined or redefined
+expr_kill := visitor {
+	before node: Expression -> {
+		switch (node.kind) {
+			case ExpressionKind.VARDECL:
+				t:=cur_cfg_node.expression.variable_decls;
+				if(len(t)!=0) {
+					varkilled=t[0].name;
+				}
+				break;
+			case ExpressionKind.ASSIGN:
+				t1:=cur_cfg_node.expression.expressions;
+				if(len(t1)!=0) {
+					varkilled=t1[0].variable;
+				}
+				break;
+			default:break;
+		}
+	}
+};
+
+# traversal tht computes killed variable for each node
+node_kill := traversal(node: CFGNode): T {
+	cur_value := getValue(node);
+	varkilled="";
+	if(def(node.expression)) {
+		cur_cfg_node=node;
+		visit(node.expression, expr_kill);
+	}
+	cur_value.kill=varkilled;
+	return cur_value;
+};
+
+# print results
+avail_expr_result := traversal(node: CFGNode): T {
+	m[method_name][node.id] << string(getValue(node).avail);
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(curr: T, prev: T) : bool {
+	if (difference(curr.avail, prev.avail) == 0)
+		return true;	
+	return false;
+};
+
+# traversal that computes available expression for all nodes
+avail_expr := traversal(node: CFGNode): T {
+	cur_value := getValue(node);
+	preds := getPreds(cfg, node);
+	result_avail:set of string;		
+	foreach(i:int;def(preds[i])) {
+		pred := getValue(preds[i]);
+		aa:=toarray(pred.avail);
+		temp_avail:set of string;
+		foreach(j:int;def(aa[j])) {
+			if(!(contains(aa[j], pred.kill))) {
+				add(temp_avail,aa[j]);
+			}
+		}
+		if(i==0) {
+			result_avail = union(pred.gen, temp_avail);
+		}
+		else {
+			result_avail = intersection(result_avail, union(pred.gen, temp_avail));
+		}
+	}
+	cur_value.avail = result_avail;
+	return cur_value;
+};
+
+def := visitor {
+	before node: Method -> {
+		method_name = node.name;
+		cfg = getcfg(node);
+		clear(allExprset);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, allExprTraversal);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, avail_init);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, node_kill);
+		traverse(cfg, TraversalKind.FORWARD, avail_expr, "fixp");
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, avail_expr_result);
+	}
+};
+
+visit(p, def);

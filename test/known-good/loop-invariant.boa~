@@ -1,0 +1,48 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+gen: map[int] of set of string;
+kill: map[int] of set of string;
+q_in: map[int] of set of string;
+q_out: map[int] of set of string;
+prev_out:map[int] of set of string;
+cfg: CFG;
+prev_node:=-2;
+temp_id:int;
+flag:=0;
+loop_start:=-1;
+loop:stack of int;
+
+q_all := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="toBinary") {
+			cfg = getcfg(node);
+
+			foreach(i:int;def(cfg.nodes[i])) {
+			}
+
+		}
+		stop;
+	}
+
+	before node:CFGNode -> {
+		if(prev_node==peek(loop)) {
+			loop_end=node.id;
+		}
+		if(getnodekind(node.kind)=="CONTROL") {
+			push(loop,node.id);
+			loop_start=node.id;		
+		}
+		prev_node = node.id;
+	}
+
+	after node:CFGNode -> {
+	}
+
+
+};
+
+visit(p, q_all);

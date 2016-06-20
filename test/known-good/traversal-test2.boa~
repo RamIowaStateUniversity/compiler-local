@@ -1,0 +1,70 @@
+m: output collection[string][int] of string;
+p: Project = input;
+
+cfg: CFG;
+in:map[int] of string;
+out:map[int] of string;
+prev_out:map[int] of string;
+method_name: string;
+a:int;
+cur_node:int;
+in[1]="R";
+out[1]="R";
+
+out1 := function (name: string, count: int) {
+		m[name][count] <<lookup(out,count,"");
+};
+
+q_all := visitor {
+	before node: CodeRepository -> {
+		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+	#	foreach(i:int;def(cfg.nodes[i])) {
+	#		a=int(cfg.nodes[i].id);
+	#		in[a]="b";
+	#		out[a]="b";
+	#	}
+		out1(method_name,1);
+		prev_out = out;
+		visit(cfg);
+	}
+
+	before node:CFGNode -> {
+		cur_node = node.id;
+		parents:=getparents(cfg, node);
+		foreach(i:int;def(parents[i])) {
+			pid:=parents[i].id;
+			in[cur_node] = in[cur_node] +"@"+ out[pid]+"@";
+		}
+		out[cur_node] = in[cur_node];
+	}
+	
+	after node:CFGNode -> {
+#		m[method_name][cur_node] << lookup(out,cur_node,"");
+	}
+#	before node:Statement -> {
+#		foreach(i:int;def(node.statements[i]))
+#			visit(node.statements[i]);
+#		visit(node.expression);
+#		stop;
+#	}
+
+#	before node:Expression -> {
+#		if(getexprkind(node.kind)=="VARDECL") {
+#			foreach(i:int;def(node.variable_decls[i]))
+#				out[cur_node]=out[cur_node] +"@"+ node.variable_decls[i].name;		
+#		}
+#		
+#		foreach(i:int;def(node.expressions[i]))
+#			visit(node.expressions[i]);
+#		stop;
+#	}
+};
+
+visit(p, q_all);

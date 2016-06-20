@@ -1,0 +1,146 @@
+m: output collection[string][string][int] of string;
+no_nodes: output collection[string] of int;
+max_stat: output maximum(50) of string weight int;
+stat_median : output median of int;
+p: Project = input;
+
+# program analysis output
+type T= {dom: set of string, com: set of string};
+	
+# cfg of the current method
+cfg: CFG;
+
+#set of all cfgnode ids
+cfgnode_ids:set of string;
+
+method_name : string;
+
+file_name : string;
+project_name : string;
+
+ii:=0;
+
+no_fixp := 0;
+max_stat_count:=0;
+max_branch_count:=0;
+max_loop_count:=0;
+fixp_count:=0;
+
+total_time : int;
+# traversal to collect all cfgnode ids
+#allnode_ids := traversal(node: CFGNode): T {
+#	add(cfgnode_ids, string(node.id));
+#};
+
+
+# traversal that initializes dominator set of cfg nodes
+cfg_dom_init := traversal(node: CFGNode): T {
+	cur_value : T;	
+	if(node.id==0) {
+		self_dom:set of string;
+		add(self_dom, string(node.id));
+		cur_value = {self_dom, self_dom};
+	}
+	else {
+		cur_value = {cfgnode_ids, cfgnode_ids};
+	}
+	return cur_value;
+};
+
+# traversal that initializes dominator set of cfg nodes
+dummy := traversal(node: CFGNode): T {
+};
+
+# traversal that constructs dominator set of cfg node
+cfg_dom := traversal(node: CFGNode): T {
+	no_fixp = no_fixp + 1;
+	cur_value:=getValue(node);
+	start_dom:set of string;
+	add(start_dom, string(node.id));
+	if(node.id!=0) {
+		preds:=getPreds(cfg, node);
+		foreach(i:int;def(preds[i])) {
+			cur_value.dom = intersection(cur_value.dom,getValue(preds[i]).dom);
+		}	
+		cur_value.dom = union(cur_value.dom, start_dom);
+	}
+	return cur_value;
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(curr: T, prev: T) : bool {
+ 	if (difference(curr.dom, prev.dom) == 0)
+ 		return true;	
+ 	return false;
+};
+
+
+# print results
+dom_result := traversal(node: CFGNode): T {
+	m[file_name][method_name][node.id] << string(getValue(node).dom);
+};
+
+q_all := visitor {
+	before n: Project -> {
+		project_name=n.name;
+	}
+
+	before n: ChangedFile -> {
+		file_name=n.name;
+	}
+
+	before node: CodeRepository -> {
+		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
+
+	before node: Method -> {
+		ii++;
+		method_name = node.name;
+		clear(cfgnode_ids);
+		#cur_time:=currentTime();
+		cfg = getcfg(node);
+		foreach(i:int;def(cfg.nodes[i])) {
+			add(cfgnode_ids, string(cfg.nodes[i].id));
+		}
+		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, allnode_ids);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_dom_init);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, dummy);
+		no_fixp = 0;
+		traverse(cfg, TraversalKind.FORWARD, cfg_dom, "fixp");
+		
+		#total_time = currentTime()-cur_time;
+		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, dom_result);
+	}
+	after node: Method -> {
+		if(no_fixp!=0 && len(cfg.nodes)!=0) {
+			#no_nodes[method_name +string(ii)+","+string(len(cfg.nodes))+","+string(max_stat_count)+","+string(max_branch_count)+","+string(max_loop_count)+","+string(fixp_count)] <<  total_time;
+			#max_stat << project_name+", "+file_name+", "+method_name+string(ii) weight (no_fixp+1)/len(cfg.nodes);
+		}
+		stat_median << fixp_count;
+		fixp_count=0;
+		#if(max_loop_count==19) {
+		#	no_nodes[project_name+", "+file_name+", "+method_name +string(ii)+string((no_fixp+1)/len(cfg.nodes))] <<  total_time;
+		#}
+		max_stat_count=0;
+		max_branch_count=0;
+		max_loop_count=0;
+	}
+	before node: Statement -> {
+		max_stat_count=max_stat_count+1;	
+		switch(node.kind) {
+			case StatementKind.IF,StatementKind.SWITCH: 
+				max_branch_count=max_branch_count+1;
+				break;
+			case StatementKind.FOR,StatementKind.DO,StatementKind.WHILE: 
+				max_loop_count=max_loop_count+1;
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+visit(p, q_all);

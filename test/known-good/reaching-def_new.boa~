@@ -1,0 +1,141 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+gen: map[int] of set of string;
+kill: map[int] of set of string;
+q_in: map[int] of set of string;
+q_out: map[int] of set of string;
+prev_out:map[int] of set of string;
+cfg: CFG;
+cur_node:int;
+temp_id:int;
+flag:=0;
+vardefined: set of string;
+vardef:string;
+flag1:=0;
+current_node: CFGNode;
+current_expr: Expression;
+
+def := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="main") {
+			cfg = getcfg(node);
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				clear(vardefined);
+				if(def(cfg.nodes[i].expression)) {
+					visit(cfg.nodes[i].expression.kind);		
+				}
+				gen[temp_id]=vardefined;
+				init_set: set of string;
+				q_in[temp_id]=init_set;
+				q_out[temp_id]=init_set;
+				prev_out[temp_id]=init_set;
+			}
+		stop;
+		}
+	}
+	
+	before node:ExpressionKind.VARDECL,ExpressionKind.ASSIGN -> {
+		add(vardefined,string(temp_id));
+	}
+	
+};
+
+use := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="main") {
+			cfg = getcfg(node);
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				varkilled: set of string;
+				vardef="";
+				if(def(cfg.nodes[i].expression)) {
+					visit(cfg.nodes[i].expression.kind,"TYPE1");
+					if(flag1==0) {
+						foreach(j:int;def(cfg.nodes[j])) {
+							if(def(cfg.nodes[j].expression) && cfg.nodes[j].id!=cfg.nodes[i].id) {
+								current_node=cfg.nodes[j];
+								current_expr=cfg.nodes[j].expression;
+								visit(cfg.nodes[j].expression.kind,"TYPE2");
+							}
+						}
+					}
+					flag1=0;		
+				}
+				kill[temp_id]=varkilled;
+			}
+		stop;
+		}
+	}
+
+	before node:ExpressionKind.VARDECL,ExpressionKind.ASSIGN,type:TYPE1 -> {
+		t:=cfg.nodes[i].expression.variable_decls;
+		vardef=t[0].name;
+	}
+
+	before node:ExpressionKind.VARDECL,type:TYPE2 -> {
+		t2:=current_expr.variable_decls;
+		if(t2[0].name==vardef) {
+			add(varkilled,string(current_node.id));
+		}
+	}
+
+	before node:ExpressionKind.ASSIGN,type:TYPE2 -> {
+		t3:=current_expr.expressions;
+		if(t3[0].variable==vardef) {
+			add(varkilled,string(current_node.id));
+		}
+	}
+
+	before node:ExpressionKind.ANY -> {
+		kill[temp_id]=varkilled;
+		flag1=1;
+	}
+};
+
+
+reach_def := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+		do{
+			flag=0;
+			visit(cfg,true);
+		}while(flag==1);
+
+		foreach(i:int;def(cfg.nodes[i])) {
+			temp_id=cfg.nodes[i].id;
+			m["out"][method_name][temp_id] << string(lookup(q_out,temp_id));
+		}
+		stop;
+	}
+
+	before node:CFGNode -> {
+		cur_node = node.id;
+		parents:=getparents(cfg, node);
+		str:="";
+		foreach(i:int;def(parents[i])) {
+			pid:=parents[i].id;
+			q_in[cur_node] = union(lookup(q_in,cur_node),lookup(q_out,pid));
+		}
+		prev_out[cur_node]=lookup(q_out,cur_node);
+		q_out[cur_node] = union(lookup(gen,cur_node),setdifference(lookup(q_in,cur_node),lookup(kill,cur_node)));
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(q_out,cur_node),lookup(prev_out,cur_node)))) {
+			flag=1;			
+		}
+	}
+};
+
+visit(p, def);
+visit(p, use);
+visit(p, reach_def);

@@ -1,0 +1,43 @@
+out: output collection[string] of string;
+
+loop :=0;
+branch :=0;
+
+method_list : array of string;
+
+p: Project = input;
+
+q_all := visitor {
+	before node: Method -> {
+		branch = 0;
+		loop = 0;
+		stat = 0;
+	}
+
+	after node: Method -> {
+		foreach(i:int;def(method_list[i])) {
+			if(node.name==method_list[i]) {
+				out[method_name] << "stat = "+string(stat)+", branch = "+string(branch)+", loop = "+string(loop);
+				break			
+			}
+		}
+		if()
+		out[method_name] << "stat = "+string(stat)+", branch = "+string(branch)+", loop = "+string(loop);
+	}
+	before node: Statement -> {
+		stat << 1;
+		switch(node.kind) {
+			case StatementKind.IF,StatementKind.SWITCH: 
+				branch = branch + 1;				
+				break;
+			case StatementKind.FOR,StatementKind.DO,StatementKind.WHILE: 
+				loop = loop + 1;				
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+visit(p, q_all);
+

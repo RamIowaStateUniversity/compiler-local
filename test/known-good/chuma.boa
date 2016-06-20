@@ -1,0 +1,140 @@
+m: output collection[string][int] of string;
+
+p: Project = input;
+path : output collection[int][string] of int;
+# program analysis output
+type T= {gen: set of string, kill: set of string, in: set of string, out: set of string};
+
+# cfg of the current method
+cfg: CFG;
+
+# current visiting cfg node
+cur_cfg_node: CFGNode;
+
+genset : set of string;
+killset : set of string;
+
+method_name : string;
+file_name : string;
+ii:=0;
+no_fixp := 0;
+max_stat_count:=0;
+max_branch_count:=0;
+max_loop_count:=0;
+total_time : int;
+
+# parse node expression to see if a variable is defined or redefined
+node_def := visitor {
+	before expr:Expression -> {
+		switch(expr.kind) {
+			case ExpressionKind.VARDECL: 
+				var_decls := cur_cfg_node.expression.variable_decls;
+				if(len(var_decls)!=0) {
+					add(killset, var_decls[0].name);
+				}				
+				break;
+			case ExpressionKind.ASSIGN: 
+				exprs := cur_cfg_node.expression.expressions;
+				if(len(exprs)!=0) {				
+					add(killset, exprs[0].variable);
+				}
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+# parse node expression to see if a variable is used or not
+node_use := visitor {
+	before expr:Expression -> {
+		if(def(expr.variable)) {
+			add(genset, expr.variable);			
+		}
+	}
+};
+
+# traversal that gets all variable uses in a method
+cfg_use := traversal(node: CFGNode): T {
+	cur_value : T;
+	init_set : set of string;
+	genset = init_set;
+	if(def(node.expression)) {
+		visit(node.expression, node_use);
+	}
+	init_set1 : set of string;
+	cur_value = {genset, init_set1, init_set1, init_set1};
+	return cur_value;
+};
+
+# traversal that gets all variable defs in a method
+cfg_def := traversal(node: CFGNode): T {
+	cur_value := getValue(node);
+	return cur_value;
+};
+
+# cfg live variable analysis
+live := traversal(node: CFGNode): T {
+	cur_val := getValue(node);
+	prev_val := getPrevValue(node);
+	if(no_fixp/len(cfg.nodes)!=3) {
+		add(cur_val.in, string(no_fixp));
+	}
+	no_fixp = no_fixp+1;
+	m["cur"][no_fixp] << string(cur_val.in);
+	if(def(prev_val)) {
+		m["prev"][no_fixp] << string(prev_val.in);
+	}
+	else {
+		m["prev"][no_fixp] << "null";
+	}
+	return cur_val;
+};
+
+# print results
+live_var_result := traversal(node: CFGNode) {
+	cur_value := getValue(node);
+	m[method_name][node.id] << string(cur_value.in);
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp1 := fixp(curr, prev: T) : bool {	
+	#m["cur"][no_fixp] << string(curr.in);
+	#m["prev"][no_fixp] << string(prev.in);
+	if (difference(curr.in, prev.in) == 0)
+		return true;	
+	return false;
+};
+
+q_all := visitor {
+	before n: Project -> {
+		file_name=n.name;
+	}
+	before node: CodeRepository -> {
+		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
+
+	before node: Method -> {
+		ii=ii+1;
+		method_name = node.name;
+		if(method_name=="live") {
+		cfg = getcfg(node);
+		map1 := traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
+		map2 := traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map1, cfg_def);
+		no_fixp = 0;
+		map2 = traverse(cfg, TraversalKind.BACKWARD, map2, live, fixp1);
+		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map2, live_var_result);
+		}
+	}
+
+	after node: Method -> {
+		if(method_name=="live") {
+		#m["a"][1] << string(no_fixp/len(cfg.nodes));
+		}
+	}
+};
+
+visit(p, q_all);

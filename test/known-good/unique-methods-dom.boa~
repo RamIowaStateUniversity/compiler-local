@@ -1,0 +1,209 @@
+p: Project = input; 
+#patterns: output sum[string] of int;
+number : output sum of int;
+total_time : output sum of int;
+patterns_set : set of string;
+getEncodingStr := function(kind: StatementKind) : string {
+    ret := "";
+    switch (kind) {
+        case StatementKind.BREAK:
+            ret = ret + "BRK";
+	        break;
+	    case StatementKind.CASE:
+            ret = ret + "CASE";
+	        break;
+	    case StatementKind.CATCH:
+            ret = ret + "CAT";
+	        break;
+	    case StatementKind.CONTINUE:
+            ret = ret + "CONT";
+	        break;
+	    case StatementKind.DO:
+            ret = ret + "DO";
+	        break;
+	    case StatementKind.EMPTY:
+            ret = ret + "EMP";
+	        break;
+	    case StatementKind.EXPRESSION:
+            ret = ret + "EXP";
+	        break;
+	    case StatementKind.FOR:
+            ret = ret + "FOR";
+	        break;
+	    case StatementKind.IF:
+            ret = ret + "IF";
+	        break;
+	    case StatementKind.LABEL:
+            ret = ret + "LAB";
+	        break;
+	    case StatementKind.OTHER:
+            ret = ret + "OTH";
+	        break;
+	    case StatementKind.RETURN:
+            ret = ret + "RET";
+	        break;
+	    case StatementKind.SWITCH:
+            ret = ret + "SWT";
+	        break;
+	    case StatementKind.SYNCHRONIZED:
+            ret = ret + "SYN";
+	        break;
+	    case StatementKind.THROW:
+            ret = ret + "THR";
+	        break;
+	    case StatementKind.TRY:
+            ret = ret + "TRY";
+	        break;
+	    case StatementKind.TYPEDECL:
+            ret = ret + "TYD";
+	        break;
+	    case StatementKind.WHILE:
+            ret = ret + "WHILE";
+	        break;
+	    case StatementKind.ASSERT:
+            ret = ret + "ASSERT";
+	        break;
+	    default:
+	        break;
+    }
+    ret = ret + ",";
+    return ret;
+};
+
+getMethodEncoding := function(method: Method) : string {
+    patt := "";
+    curr := "";
+    ifelse := false;
+    ifElseCounter := 0;
+    visit(method, visitor {
+        before stmt: Statement -> {
+            if (ifelse) {
+                ifElseCounter++;
+            }
+            if (stmt.kind != StatementKind.BLOCK && stmt.kind != StatementKind.EXPRESSION) {
+        	    if (len(stmt.statements) > 0)
+            	        patt = patt + "{";
+            	curr = getEncodingStr(stmt.kind); #format("%s,", stmt.kind);
+            	patt = patt + curr;
+    	    }
+	        switch (stmt.kind) {
+	            case StatementKind.IF:
+        	        if (len(stmt.statements) == 2) {
+                        ifelse = true;
+        	        }
+	                break;
+	            default:
+	                break;
+	        }
+        }
+        after stmt: Statement -> {
+            if (ifelse) {
+                ifElseCounter--;
+                if (ifElseCounter == 0) {
+                    patt = patt + "ELSE,";
+                    ifelse = false;
+                }
+            }
+            if (stmt.kind != StatementKind.BLOCK)
+        	    if (len(stmt.statements) > 0)
+        	        patt = patt + "},";
+        }
+    });
+    return patt;    
+};
+
+m: output collection[string][string][int] of string;
+
+# program analysis output
+type T= {dom: set of string, com: set of string};
+	
+# cfg of the current method
+cfg: CFG;
+
+#set of all cfgnode ids
+cfgnode_ids:set of string;
+
+method_name : string;
+
+file_name : string;
+ii:=0;
+
+# traversal to collect all cfgnode ids
+allnode_ids := traversal(node: CFGNode): T {
+	add(cfgnode_ids, string(node.id));
+};
+
+
+# traversal that initializes dominator set of cfg nodes
+cfg_dom_init := traversal(node: CFGNode): T {
+	cur_value : T;	
+	if(node.id==0) {
+		self_dom:set of string;
+		add(self_dom, string(node.id));
+		cur_value = {self_dom, self_dom};
+	}
+	else {
+		cur_value = {cfgnode_ids, cfgnode_ids};
+	}
+	return cur_value;
+};
+
+# traversal that constructs dominator set of cfg node
+cfg_dom := traversal(node: CFGNode): T {
+	cur_value:=getValue(node);
+	start_dom:set of string;
+	add(start_dom, string(node.id));
+	if(node.id!=0) {
+		preds:=getPreds(cfg, node);
+		foreach(i:int;def(preds[i])) {
+			cur_value.dom = intersection(cur_value.dom,getValue(preds[i]).dom);
+		}	
+		cur_value.dom = union(cur_value.dom, start_dom);
+	}
+	return cur_value;
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(curr: T, prev: T) : bool {
+ 	if (difference(curr.dom, prev.dom) == 0)
+ 		return true;	
+ 	return false;
+};
+
+# print results
+dom_result := traversal(node: CFGNode): T {
+	m[file_name][method_name][node.id] << string(getValue(node).dom);
+};
+
+
+visit(p, visitor {
+	before n: Project -> {
+		file_name=n.name;
+	}
+
+	before node: CodeRepository -> {
+		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
+
+	before m: Method -> {
+	    pattern := getMethodEncoding(m);
+		number << 1;
+	    if(!contains(patterns_set, pattern)) {
+		
+		ii++;
+		cur_time:=currentTime();
+		method_name = m.name;
+		clear(cfgnode_ids);
+		cfg = getcfg(m);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, allnode_ids);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_dom_init);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_dom, "fixp");
+		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, dom_result);
+		total_time << currentTime()-cur_time;
+	    }
+	    add(patterns_set, pattern);   
+	}
+});

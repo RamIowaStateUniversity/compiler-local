@@ -1,0 +1,137 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+fs: flowset{gen: set of string, kill: set of string, in: set of string, out: set of string};
+prev_fs: flowset{gen: set of string, kill: set of string, in: set of string, out: set of string};
+fsmap:=map[int] of fs;
+cfg: CFG;
+cur_node_id:int;
+flag1:=0;
+vardefined: set of string;
+vardef: string;
+cur_cfg_node:CFGNode;
+varkilled: set of string;
+
+cfg_def := traversal {
+	before node: CFGNode -> {
+		cur_node_id=node.id;
+	}
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL, ExpressionKind.ASSIGN: 
+				add(getFlowSet(fsmap, cur_node_id).getGen(), string(cur_node_id));
+  				break;
+			default: break;
+		}
+	}
+};
+
+node_def :=visitor {
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL: 
+				t:=cur_cfg_node.expression.variable_decls;
+				vardef=t[0].name;				
+				break;
+			case ExpressionKind.ASSIGN: 
+				t1:=cur_cfg_node.expression.expressions;
+				vardef=t1[0].variable;
+				break;
+			default:
+				flag1=1; 
+				break;
+		}
+	}
+};
+
+node_kill :=visitor {
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL: 
+				t2:=cur_cfg_node.expression.variable_decls;
+				if(t2[0].name==vardef) {
+					add(varkilled,string(cur_cfg_node.id));
+				}				
+				break;
+			case ExpressionKind.ASSIGN: 
+				t3:=cur_cfg_node.expression.expressions;
+				if(t3[0].variable==vardef) {
+					add(varkilled,string(cur_cfg_node.id));
+				}
+			default:
+				break;
+		}
+	}
+};
+
+cfg_use := traversal {
+	before node: CFGNode -> {
+		init_set1: set of string;
+		vardef="";
+		if(def(node.expression)) {
+			cur_cfg_node=node;
+			visit(node.expression,node_def);
+			if(flag1==0) {
+				foreach(j:int;def(cfg.nodes[j])) {
+					if(def(cfg.nodes[j].expression) && cfg.nodes[j].id!=node.id) {
+						cur_cfg_node=cfg.nodes[j];
+						visit(cfg.nodes[j].expression,node_kill);
+					}
+				}
+			}
+			flag1=0;
+		}
+		getFlowSet(fsmap, node.id).kill=varkilled;
+	}
+};
+
+cfg_reach_def := traversal {
+	before node:CFGNode -> {
+		parents:=getparents(cfg, node);
+		temp_fs:=getFlowSet(fsmap,node.id);
+		foreach(i:int;def(parents[i])) {
+			pid:=parents[i].id;			
+			cur_parent:=getFlowSet(fsmap,pid);
+			temp_fs.in = union(temp_fs.getIn(),cur_parent.getOut());
+		}
+		prev_fs=temp_fs;
+		temp_fs.out=union(temp_fs.getIn(),setdifference(temp_fs.getIn(),temp_fs.getKill()));
+		fsmap[node.id]=temp_fs;
+	}
+};
+
+reach_def_result := traversal {
+	before node:CFGNode -> {
+		m["out"][getMethod(cfg)][node.id] << string(getFlowSet(fsmap, node.id).getOut());
+		stop;
+	}
+};
+
+def := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		traverse(cfg,TraversalKind.DEEP_ITERATIVE,cfg_def);
+	}
+};
+
+use := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		traverse(cfg,TraversalKind.DEEP_ITERATIVE,cfg_use);
+	}
+};
+
+reach_def := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		#do{
+			traverse(cfg,TraversalKind.FORWARD,cfg_reach_def);
+		#}while(equal(fsmap,fs.out,fs.prev_out));
+		traverse(cfg,TraversalKind.DEEP_ITERATIVE,reach_def_result);
+	}
+};
+
+visit(p, def);
+visit(p, use);
+visit(p, reach_def);

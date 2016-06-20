@@ -1,0 +1,190 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+all_expressions: set of string;
+gen: map[int] of set of string;
+kill: map[int] of string;
+avail: map[int] of set of string;
+prev_avail:map[int] of set of string;
+cfg: CFG;
+cur_node:int;
+temp_id:int;
+flag:=0;
+flag1:=0;
+expr_computed: set of string;
+vardef: string;
+cur_cfg_node:CFGNode;
+varkilled: string;
+str:string;
+
+def1 := cfgvisitor {
+	
+	before node: CFGNode -> {
+		temp_id=node.id;
+		init_set: set of string;
+		expr_computed=init_set;
+		str="";
+		if(def(node.expression)) {
+			visit(node.expression);
+			if(str!="") {
+				add(all_expressions,str);
+				add(expr_computed,str);
+			}
+			gen[temp_id]=expr_computed;
+			m["gen"][method_name][temp_id] << string(lookup(gen,temp_id));
+		}
+		stop;
+	}
+
+	before node: Expression -> {
+		switch (node.kind) {
+			case ExpressionKind.LT:
+				str=str+"<"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.OP_ADD:
+				str=str+"+"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.OP_INC:
+				str=str+"++"; 
+				foreach(j:int;def(node.expressions[j])) {
+					visit(node.expressions[j]);
+				}
+				break;
+			case ExpressionKind.ASSIGN:
+				foreach(j:int;def(node.expressions[j])) {
+					if(j!=0) {
+						visit(node.expressions[j]);
+					}
+				}
+				break;
+			case ExpressionKind.VARACCESS:
+				str=str+node.variable;
+				break;
+			case ExpressionKind.VARDECL:
+				visit(node.variable_decls[0].initializer);
+				break;
+			case ExpressionKind.LITERAL:
+				str=str+node.literal;
+				break;
+			default:break;
+		}
+		stop;
+	}
+};
+
+def := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+		foreach(i:int;def(cfg.nodes[i])) {
+			visit(cfg.nodes[i], def1);
+		}
+
+		foreach(i:int;def(cfg.nodes[i])) {
+			temp_id=cfg.nodes[i].id;
+			init_set1: set of string;
+			if(temp_id==0) {
+				avail[temp_id]=init_set1;
+			}
+			else {
+				avail[temp_id]=all_expressions;
+			}
+			prev_avail[temp_id]=init_set1;
+		}
+	}
+};
+
+use := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			cfg = getcfg(node);
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				varkilled="";
+				if(def(cfg.nodes[i].expression)) {
+					cur_cfg_node=cfg.nodes[i];
+					visit(cfg.nodes[i].expression.kind);
+				}
+				kill[temp_id]=varkilled;
+			}
+		}
+		stop;
+	}
+
+	before node: ExpressionKind -> {
+		switch (node) {
+			case ExpressionKind.VARDECL:
+				t:=cur_cfg_node.expression.variable_decls;
+				varkilled=t[0].name;
+				break;
+			case ExpressionKind.ASSIGN:
+				t1:=cur_cfg_node.expression.expressions;
+				varkilled=t1[0].variable;
+				break;
+			default:break;
+		}
+	}
+};
+
+reach_def := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			cfg = getcfg(node);
+			do{
+				flag=0;
+				visit(cfg,true);
+			}while(flag==1);
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				m["avail"][method_name][temp_id] << string(lookup(avail,temp_id));
+			}
+		}
+		stop;
+	}
+
+	before node:CFGNode -> {
+		cur_node = node.id;
+		parents:=getparents(cfg, node);
+		prev_avail[cur_node]=lookup(avail,cur_node);
+		result_avail:set of string;		
+		foreach(i:int;def(parents[i])) {
+			pid:=parents[i].id;
+			aa:=toarray(lookup(avail,pid));
+			temp_avail:set of string;
+			foreach(j:int;def(aa[j])) {
+				if(!(contains(aa[j],lookup(kill,pid)))) {
+					add(temp_avail,aa[j]);
+				}
+			}
+			if(i==0) {
+				result_avail = union(lookup(gen,pid),temp_avail);
+			}
+			else {
+				result_avail = intersection(result_avail,union(lookup(gen,pid),temp_avail));
+			}
+		}
+		avail[cur_node]=result_avail;
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(avail,cur_node),lookup(prev_avail,cur_node)))) {
+			flag=1;			
+		}
+	}
+
+};
+
+visit(p, def);
+visit(p, use);
+visit(p, reach_def);

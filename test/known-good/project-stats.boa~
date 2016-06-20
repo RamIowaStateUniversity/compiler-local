@@ -1,0 +1,57 @@
+max_stat: output maximum(1) of string weight int;
+
+branch: output sum of int;
+rest: output sum of int;
+
+rest_flag:bool;
+branch_flag:bool;
+
+p: Project = input;
+
+uni: set of string;
+method_name : string;
+project_name : string;
+file_name : string;
+
+max_stat_count:=0;
+max_branch_count:=0;
+max_loop_count:=0;
+ii:=0;
+
+q_all := visitor {
+	before node: Project -> {
+		if(project_name!="mockito/mockito") {
+			stop;
+		}
+	}
+	before node: ChangedFile -> {
+		file_name = node.name;
+	}
+	before node: Method -> {
+		ii=ii+1;
+		method_name = node.name;
+	}
+	after node: Method -> {
+		max_stat << file_name weight max_stat_count;
+		max_stat_count=0;
+		max_branch_count=0;
+		max_loop_count=0;
+	}
+	before node: Statement -> {
+		max_stat_count=max_stat_count+1;
+		
+		switch(node.kind) {
+			case StatementKind.IF,StatementKind.SWITCH: 
+				max_branch_count=max_branch_count+1;
+				break;
+			case StatementKind.FOR,StatementKind.DO,StatementKind.WHILE: 
+				max_loop_count=max_loop_count+1;
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+visit(p, q_all);
+

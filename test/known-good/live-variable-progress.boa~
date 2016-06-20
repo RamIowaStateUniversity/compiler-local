@@ -1,0 +1,100 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+# program analysis output
+type T= {gen: set of string, kill: set of string, in: set of string, out: set of string};
+
+# cfg of the current method
+cfg: CFG;
+
+# current visiting cfg node
+cur_cfg_node: CFGNode;
+
+# generated values set
+genset: set of string;
+
+# parse node expression to see if a variable is defined or redefined
+node_def := visitor {
+	before expr:Expression -> {
+		switch(expr.kind) {
+			case ExpressionKind.VARDECL: 
+				var_decls := cur_cfg_node.expression.variable_decls;
+				add(killset.kill, var_decls[0].name);				
+				break;
+			case ExpressionKind.ASSIGN: 
+				exprs := cur_cfg_node.expression.expressions;
+				add(killset.kill, exprs[0].variable);
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+# parse node expression to see if a variable is used or not
+node_use := visitor {
+	before expr:Expression -> {
+		if(def(expr.variable)) {
+			add(genset, expr.variable);			
+		}
+	}
+};
+
+# traversal that gets all variable uses in a method
+cfg_use := traversal(node: CFGNode): T {
+	cur_value=getValue(node);
+	clear(genset);
+	if(def(node.expression)) {
+		visit(node.expression, node_use);
+	}
+	cur_value.gen=genset;
+	return cur_value;
+};
+
+# traversal that gets all variable defs in a method
+cfg_def := traversal(node: CFGNode): T {
+		killset = getValue(node);
+		clear(killset.kill);
+		if (def(node.expression)) {
+			cur_cfg_node = node;
+			visit(node.expression, node_def);
+		}
+		return killset;
+};
+
+# cfg live variable analysis
+live := traversal(node: CFGNode): T {
+	succs:=getSuccs(cfg, node);
+	cur_val := getValue(node);
+	foreach(i:int;def(succs[i])) {
+		succ := getValue(succs[i]);
+		cur_val.out = union(cur_val.out,succ.in);
+	}
+	cur_val.in = union(cur_val.gen, setdifference(cur_val.out, cur_val.kill));
+	return cur_val;
+};
+
+# print results
+live_var_result := traversal(node: CFGNode): T {
+	m[getMethod(cfg)][node.id] << string(getValue().in);
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(curr: T, prev: T) : bool {
+	if (difference(curr.in, prev.in) == 0)
+		return true;	
+	return false;
+};
+
+q_all := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_init);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_def);
+		traverse(cfg, TraversalKind.BACKWARD, live);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, live_var_result);
+		stop;
+	}
+};
+
+visit(p, q_all);

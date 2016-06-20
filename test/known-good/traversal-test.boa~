@@ -1,0 +1,41 @@
+m: output collection[string][int] of int;
+p: Project = input;
+
+analysis_score:int;
+method_name:string;
+
+q_all := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		visit(getcfg(node));
+		stop;
+	}
+
+	before node:CFG -> {
+		#custom visit can be added here
+		#default visit traverse cfg nodes in depth first from start node to end node(forward flow)	
+	}
+
+	before node:CFGNode -> {
+		visit(node.statement);
+		visit(node.expression);
+		m[method_name][node.id] << analysis_score;
+
+		#custom visit can be added here
+		#default visit traverse statements and expressions in the cfg node
+		#analysis on nodes can be done
+	}
+
+	before node: Statement -> {
+		foreach (i: int; def(node.statements[i]))
+			visit(node.statements[i]);
+	}
+
+	before node: Expression -> {
+		foreach (i: int; def(node.expressions[i]))
+			visit(node.expressions[i]);
+	}
+};
+
+visit(p, q_all);

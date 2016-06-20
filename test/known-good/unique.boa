@@ -1,0 +1,16 @@
+m: output collection of int;
+p: Project = input;
+
+uni: set of string;
+
+q_all := visitor {
+	before node: Method -> {
+		cfg := getcfg(node);
+		add(uni, string(len(cfg.nodes))+"@"+string(len(cfg.edges)));
+		stop;
+	}
+};
+
+visit(p, q_all);
+
+m << len(uni);

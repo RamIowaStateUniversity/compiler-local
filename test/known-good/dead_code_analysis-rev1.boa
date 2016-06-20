@@ -1,0 +1,164 @@
+m: output collection[string] of string;
+p: Project = input;
+
+# program analysis output
+type T= {gen: set of string, kill: set of string, in: set of string, out: set of string};
+
+cfg: CFG;
+
+# generated values set
+genset: set of string;
+
+killset: set of string;
+
+flag1:=0;
+prev_dead_nodes: set of string;
+dead_nodes: set of string;
+
+# parse node expression to see if a variable is used or not
+node_use := visitor {
+	before expr:Expression -> {
+		if(def(expr.variable)) {
+			add(genset, expr.variable);			
+		}
+	}
+};
+
+node_kill := visitor {
+	before node: Expression -> {
+		switch (node.kind) {
+			case ExpressionKind.VARDECL: 
+				vardecls:=node.variable_decls;
+				add(killset,vardecls[0].name);
+				break;
+			case ExpressionKind.ASSIGN: 
+				exprs:=node.expressions;
+				add(killset,exprs[0].variable);	
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+# traversal that gets all variable uses in a method
+cfg_use := traversal(node: CFGNode): T {
+	cur_value=getValue();
+	clear(genset);
+	if(def(node.expression)) {
+		visit(node.expression, node_use);
+		visit(node.expression, node_kill);
+	}
+	cur_value.gen=genset;
+	cur_value.kill=killset;
+	return cur_value;
+};
+
+cfg_iterate := traversal(node: CFGNode): T {
+	cur_value:= getValue();
+	if(!contains(dead_nodes,string(node.id))) {
+		succs:=getsuccs(cfg, node);
+		stack1:stack of CFGNode;
+		stack2:stack of int;
+		foreach(i:int;def(succs[i])) {
+			push(stack1, succs[i]);
+		}
+		while(len(stack1)!=0) {
+			cfgnode:=pop(stack1);
+			cfgnodeid:=cfgnode.id;
+			if(!contains(dead_nodes,string(cfgnodeid))) {
+				push(stack2,cfgnodeid);
+			}
+			else {
+				stack_succs:=getsuccs(cfg, cfgnode);
+				foreach(n:int;def(stack_succs[n])) {
+					push(stack1,stack_succs[n]);
+				}
+			}
+		}
+		while(len(stack2)!=0) {
+			nodeid:=pop(stack2);
+			cur_value.out = union(cur_value.out, cur_value.in);
+		}
+		cur_value.in = union(cur_value.gen, setdifference(cur_value.out, cur_value.kill));
+	}
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(curr: T, prev: T) : bool {
+	if (difference(curr.in, prev.in) == 0)
+		return true;	
+	return false;
+};
+
+init := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_init);
+		traverse(cfg, TraversalKind.BACKWARD, cfg_iterate, fixp);
+		stop;
+	}
+};
+
+cfg_dead := traversal(node: CFGNode): T {
+	cur_value := getValue();
+	if(len(cur_value.kill)!=0) {
+		succs:=getSuccs(cfg, node);
+		stack1:stack of CFGNode;
+		stack2:stack of int;
+		foreach(i:int;def(succs[i])) {
+			push(stack1,succs[i]);
+		}
+		while(len(stack1)!=0) {
+			cfgnode:=pop(stack1);
+			cfgnodeid:=cfgnode.id;
+			if(!contains(dead_nodes,string(cfgnodeid))) {
+				push(stack2,cfgnodeid);
+			}
+			else {
+				stack_succs:=getsuccs(cfg, cfgnode);
+				foreach(n:int;def(stack_succs[n])) {
+					push(stack1,stack_succs[n]);
+				}
+			}
+		}
+		while(len(stack2)!=0) {
+			nodeid:=pop(stack2);
+			if(containsAll(lookup(q_in, nodeid), cur_value.kill)) {
+					flag1=1;
+					break;
+			}
+		}
+		if(flag1==0) {
+			add(dead_nodes,string(node.id));
+		}
+	}
+	flag1=0;
+};
+
+dead := visitor {
+	before node: Method -> {
+		traverse(cfg, TraversalKind.BACKWARD, cfg_dead);
+	}
+};
+
+dead_code_result := visitor {
+	before node: Method -> {
+		m[node.name] << string(dead_nodes);
+	}
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp1 := function(curr: set of string, prev: set of string) : bool {
+	if (difference(curr, prev) == 0)
+		return true;	
+	return false;
+};
+
+do {
+	addAll(prev_dead_nodes, dead_nodes);
+	visit(p, init);
+	visit(p, dead);
+}while(!(fixp1(dead_nodes,prev_dead_nodes)));
+
+visit(p, dead_code_result);

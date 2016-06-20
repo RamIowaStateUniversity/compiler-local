@@ -1,0 +1,78 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+gen: map[int] of set of string;
+kill: map[int] of set of string;
+q_in: map[int] of set of string;
+q_out: map[int] of set of string;
+prev_in:map[int] of set of string;
+cfg: CFG;
+cur_node:int;
+temp_id:int;
+flag:=0;
+
+
+q_all := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			cfg = getcfg(node);
+
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				gen[temp_id]=getvariableused(cfg.nodes[i]);
+				kill[temp_id]=getvariabledef(cfg.nodes[i]);
+				init_set: set of string;
+				q_out[temp_id]=init_set;
+				q_in[temp_id]=init_set;
+				prev_in[temp_id]=init_set;
+			}
+			do{
+				flag=0;
+				visit(cfg,true);
+			}while(flag==1);
+		}
+		stop;
+	}
+
+	before node:CFGNode -> {
+		cur_node = node.id;
+		children:=getchildren(cfg, node);
+		foreach(i:int;def(children[i])) {
+			cid:=children[i].id;
+			q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,cid));
+		}
+		prev_in[cur_node]=lookup(q_in,cur_node);
+		q_in[cur_node] = union(lookup(gen,cur_node),setdifference(lookup(q_out,cur_node),lookup(kill,cur_node)));
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(q_in,cur_node),lookup(prev_in,cur_node)))) {
+			flag=1;				
+		}
+	}
+};
+
+dead := visitor {
+	before node:CFGNode -> {
+		cur_node = node.id;
+		children:=getchildren(cfg, node);
+		foreach(i:int;def(children[i])) {
+			cid:=children[i].id;
+			lookup(q_in,cid)
+			q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,cid));
+		}
+		prev_in[cur_node]=lookup(q_in,cur_node);
+		q_in[cur_node] = union(lookup(gen,cur_node),setdifference(lookup(q_out,cur_node),lookup(kill,cur_node)));
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(q_in,cur_node),lookup(prev_in,cur_node)))) {
+			flag=1;				
+		}
+	}
+};
+
+visit(p, q_all);
+visit(p, dead);

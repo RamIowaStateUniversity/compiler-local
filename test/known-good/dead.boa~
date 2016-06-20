@@ -1,0 +1,145 @@
+m: output collection[string][int] of string;
+p: Project = input;
+
+method_name: string;
+gen: map[int] of set of string;
+kill: map[int] of set of string;
+q_in: map[int] of set of string;
+q_out: map[int] of set of string;
+prev_in:map[int] of set of string;
+cfg: CFG;
+cur_node:int;
+temp_id:int;
+flag:=0;
+flag1:=0;
+init_set1: set of string;
+prev_dead_nodes:=init_set1;
+dead_nodes:set of string;
+i1:=0;
+
+q_all := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			cfg = getcfg(node);
+
+			foreach(i:int;def(cfg.nodes[i])) {
+				temp_id=cfg.nodes[i].id;
+				gen[temp_id]=getvariableused(cfg.nodes[i]);
+				kill[temp_id]=getvariabledef(cfg.nodes[i]);
+				init_set: set of string;
+				q_out[temp_id]=init_set;
+				q_in[temp_id]=init_set;
+				prev_in[temp_id]=init_set;
+			}
+			do{
+				flag=0;
+				visit(cfg,true);
+			}while(flag==1);
+		}
+		stop;
+	}
+
+	before node:CFGNode -> {
+		cur_node = node.id;
+		if(!contains(dead_nodes,string(cur_node))) {
+			children:=getchildren(cfg, node);
+			stack1:stack of CFGNode;
+			stack2:stack of int;
+			foreach(i:int;def(children[i])) {
+				push(stack1,children[i]);
+			}
+			while(len(stack1)!=0) {
+				cfgnode:=pop(stack1);
+				cfgnodeid:=cfgnode.id;
+				if(!contains(dead_nodes,string(cfgnodeid))) {
+					push(stack2,cfgnodeid);
+				}
+				else {
+					stack_children:=getchildren(cfg, cfgnode);
+					foreach(n:int;def(stack_children[n])) {
+						push(stack1,stack_children[n]);
+					}
+				}
+			}
+			while(len(stack2)!=0) {
+				nodeid:=pop(stack2);
+				q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,nodeid));
+			}
+			foreach(i:int;def(children[i])) {
+				cid:=children[i].id;
+				if(!contains(dead_nodes,string(cid))) {
+					q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,cid));
+				}
+				else {
+					sub_children:=getchildren(cfg, children[i]);
+					foreach(l:int;def(sub_children[l])) {
+						sub_cid:=sub_children[l].id;
+						q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,sub_cid));
+					}
+				}
+			}
+			prev_in[cur_node]=lookup(q_in,cur_node);
+			q_in[cur_node] = union(lookup(gen,cur_node),setdifference(lookup(q_out,cur_node),lookup(kill,cur_node)));
+		}
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(q_in,cur_node),lookup(prev_in,cur_node)))) {
+			flag=1;				
+		}
+	}
+};
+
+dead := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			visit(cfg,false);
+			m["dead"][i1] << string(dead_nodes);
+		}
+	}
+	before node:CFGNode -> {
+		cur_node = node.id;
+		cur_kill:=lookup(kill,cur_node);
+		if(len(cur_kill)!=0) {
+			children:=getchildren(cfg, node);
+			stack1:stack of CFGNode;
+			stack2:stack of int;
+			foreach(i:int;def(children[i])) {
+				push(stack1,children[i]);
+			}
+			while(len(stack1)!=0) {
+				cfgnode:=pop(stack1);
+				cfgnodeid:=cfgnode.id;
+				if(!contains(dead_nodes,string(cfgnodeid))) {
+					push(stack2,cfgnodeid);
+				}
+				else {
+					stack_children:=getchildren(cfg, cfgnode);
+					foreach(n:int;def(stack_children[n])) {
+						push(stack1,stack_children[n]);
+					}
+				}
+			}
+			while(len(stack2)!=0) {
+				nodeid:=pop(stack2);
+				if(containsAll(lookup(q_in,nodeid),cur_kill)) {
+						flag1=1;
+						break;
+				}
+			}
+			if(flag1==0) {
+				add(dead_nodes,string(cur_node));
+			}
+		}
+		flag1=0;
+	}
+};
+
+do {
+	addAll(prev_dead_nodes,dead_nodes);
+	visit(p, q_all);
+	visit(p, dead);
+	i1=i1+1;
+}while(!(isseteq(dead_nodes,prev_dead_nodes)));

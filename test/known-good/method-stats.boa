@@ -1,0 +1,45 @@
+seq: output sum of int;
+branch: output sum of int;
+rest: output sum of int;
+no_methods : output sum of int;
+rest_flag:bool;
+branch_flag:bool;
+
+p: Project = input;
+
+uni: set of string;
+
+q_all := visitor {
+	before node: Method -> {
+		no_methods << 1;
+		rest_flag=false;
+		branch_flag=false;
+	}
+
+	after node: Method -> {
+		if(rest_flag==true) {
+			rest << 1;
+		}
+		else if(branch_flag==true) {
+			branch << 1;		
+		}
+		else {
+			seq << 1;		
+		}
+	}
+	before node: Statement -> {
+		switch(node.kind) {
+			case StatementKind.IF,StatementKind.SWITCH: 
+				branch_flag = true;				
+				break;
+			case StatementKind.FOR,StatementKind.DO,StatementKind.WHILE: 
+				rest_flag = true;				
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+visit(p, q_all);
+

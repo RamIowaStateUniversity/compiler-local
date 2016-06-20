@@ -1,0 +1,187 @@
+m: output collection[string] of string;
+p: Project = input;
+
+# program analysis output
+gen: set of string;
+kill: set of string;
+q_in: set of string;
+q_out: set of string;
+
+cfg: CFG;
+cur_node:int;
+temp_id:int;
+flag:=0;
+flag1:=0;
+init_set1: set of string;
+prev_dead_nodes:=init_set1;
+dead_nodes:set of string;
+varused: set of string;
+
+cfg_init := cfgvisitor {
+	before node: CFGNode -> {
+		temp_id=node.id;
+		vardef: set of string;
+		stack_expr:stack of Expression;
+		stack_vardecl:stack of Variable;
+		if(def(node.expression)) {
+			push(stack_expr,node.expression);
+		}
+		while(len(stack_expr)!=0 || len(stack_vardecl)!=0) {
+			while(len(stack_expr)!=0) {
+				cur_expr:=pop(stack_expr);
+				if(def(cur_expr.variable)) {
+					add(vardef,cur_expr.variable);
+				}
+				foreach(j:int;def(cur_expr.expressions[j])) {
+					push(stack_expr,cur_expr.expressions[j]);
+				}
+				foreach(k:int;def(cur_expr.variable_decls[k])) {
+					push(stack_vardecl,cur_expr.variable_decls[k]);
+				}
+				foreach(l:int;def(cur_expr.method_args[l])) {
+					push(stack_expr,cur_expr.method_args[l]);
+				}
+			}
+			while(len(stack_vardecl)!=0) {
+				cur_vardecl:=pop(stack_vardecl);
+				if(def(cur_vardecl.initializer)) {
+					push(stack_expr,cur_vardecl.initializer);
+				}
+			}
+		}
+		gen[temp_id]=vardef;
+		init_set2: set of string;
+		varused=init_set2;
+		if(def(node.expression)) {
+			visit(node.expression);
+		}
+		kill[temp_id]=varused;
+		init_set: set of string;
+		q_out[temp_id]=init_set;
+		q_in[temp_id]=init_set;
+		prev_in[temp_id]=init_set;
+		stop;
+	}
+
+	before node: Expression -> {
+		switch (node.kind) {
+			case ExpressionKind.VARDECL: 
+				vardecls:=node.variable_decls;
+				add(varused,vardecls[0].name);
+				break;
+			case ExpressionKind.ASSIGN: 
+				exprs:=node.expressions;
+				add(varused,exprs[0].variable);	
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+cfg_iterate := cfgvisitor {
+	before node:CFGNode -> {
+		cur_node = node.id;
+		if(!contains(dead_nodes,string(cur_node))) {
+			children:=getchildren(cfg, node);
+			stack1:stack of CFGNode;
+			stack2:stack of int;
+			foreach(i:int;def(children[i])) {
+				push(stack1,children[i]);
+			}
+			while(len(stack1)!=0) {
+				cfgnode:=pop(stack1);
+				cfgnodeid:=cfgnode.id;
+				if(!contains(dead_nodes,string(cfgnodeid))) {
+					push(stack2,cfgnodeid);
+				}
+				else {
+					stack_children:=getchildren(cfg, cfgnode);
+					foreach(n:int;def(stack_children[n])) {
+						push(stack1,stack_children[n]);
+					}
+				}
+			}
+			while(len(stack2)!=0) {
+				nodeid:=pop(stack2);
+				q_out[cur_node] = union(lookup(q_out,cur_node),lookup(q_in,nodeid));
+			}
+			prev_in[cur_node]=lookup(q_in,cur_node);
+			q_in[cur_node] = union(lookup(gen,cur_node),setdifference(lookup(q_out,cur_node),lookup(kill,cur_node)));
+		}
+	}
+
+	after node:CFGNode -> {
+		if(!(isseteq(lookup(q_in,cur_node),lookup(prev_in,cur_node)))) {
+			flag=1;				
+		}
+	}
+};
+
+init := visitor {
+	before node: Method -> {
+		cfg = getcfg(node);
+		visit(cfg, TraversalKind.DEEP_ITERATIVE, cfg_init);
+		do{
+			flag=0;
+			visit(cfg,true,cfg_iterate);
+		}while(flag==1);
+		stop;
+	}
+};
+
+cfg_dead := cfgvisitor {
+	before node:CFGNode -> {
+		cur_node = node.id;
+		cur_kill:=lookup(kill,cur_node);
+		if(len(cur_kill)!=0) {
+			children:=getchildren(cfg, node);
+			stack1:stack of CFGNode;
+			stack2:stack of int;
+			foreach(i:int;def(children[i])) {
+				push(stack1,children[i]);
+			}
+			while(len(stack1)!=0) {
+				cfgnode:=pop(stack1);
+				cfgnodeid:=cfgnode.id;
+				if(!contains(dead_nodes,string(cfgnodeid))) {
+					push(stack2,cfgnodeid);
+				}
+				else {
+					stack_children:=getchildren(cfg, cfgnode);
+					foreach(n:int;def(stack_children[n])) {
+						push(stack1,stack_children[n]);
+					}
+				}
+			}
+			while(len(stack2)!=0) {
+				nodeid:=pop(stack2);
+				if(containsAll(lookup(q_in,nodeid),cur_kill)) {
+						flag1=1;
+						break;
+				}
+			}
+			if(flag1==0) {
+				add(dead_nodes,string(cur_node));
+			}
+		}
+		flag1=0;
+	}
+};
+
+dead := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="dead2") {
+			visit(cfg,false,cfg_dead);
+		}
+	}
+};
+
+do {
+	addAll(prev_dead_nodes,dead_nodes);
+	visit(p, init);
+	visit(p, dead);
+}while(!(isseteq(dead_nodes,prev_dead_nodes)));
+
+m["dead"] << string(dead_nodes);

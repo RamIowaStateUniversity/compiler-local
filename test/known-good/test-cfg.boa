@@ -1,0 +1,36 @@
+m: output collection[string] of string;
+p: Project = input;
+
+q_all := visitor {
+#before n: CodeRepository -> {
+#		snapshot := getsnapshot(n, "SOURCE_JAVA_JLS");
+#		foreach (i: int; def(snapshot[i]))
+#			visit(snapshot[i]);
+#		stop;
+#	}
+
+before node: Declaration -> {
+		foreach (i: int; node.methods[i])
+			visit(node.methods[i]);
+
+		foreach (i: int; node.nested_declarations[i])
+			visit(node.nested_declarations[i]);
+
+		stop;
+	}
+	before node: Method -> {		
+		#cur_graph := getcfg(node);
+		#node_list := cur_graph.nodes;
+		m[node.name] << getcfgstring(node);		
+		#i1:=0;
+		#foreach(j:int;node_list[j]) {
+		#	i1=i1+1;
+			#expr:= getexpression(node_list[j]);
+		#	nt := node_list[j].kind;
+		#	m << string(i1)+getnodekind(nt);		
+		#} 
+		stop;
+	}
+};
+
+visit(p, q_all);

@@ -1,0 +1,17 @@
+
+p: Project = input;
+
+type T={gen: set of string, kill: set of string, q_in: set of string, q_out: set of string, prev_out: set of string};
+node_var:map[int] of T;
+a:set of string;
+add(a,"a");
+aa:T;
+
+
+aa.gen=a;
+node_var[1]=aa;
+emit1 : output collection of string;
+emit1 << string(node_var[1].gen);
+
+emit2 : output collection of int;
+emit2 << 1;

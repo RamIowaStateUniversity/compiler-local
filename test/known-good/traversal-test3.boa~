@@ -1,0 +1,69 @@
+m: output collection[string][int] of string;
+p: Project = input;
+
+method_name: string;
+q_in: map[int] of set of string;
+q_out: map[int] of set of string;
+prev_out:map[int] of set of string;
+kill: set of string;
+cfg: CFG;
+a:int;
+cur_node:int;
+flag:=0;
+
+q_all := visitor {
+	
+	before node: Method -> {
+		method_name=node.name;
+		if(method_name=="maincopy") {
+			cfg = getcfg(node);
+			do{
+				flag=0;
+				prev_out = q_out;
+				visit(cfg);
+				foreach(i:int;def(cfg.nodes[i])) {
+					if(isseteq(lookup(q_out,cfg.nodes[i].id,kill),lookup(prev_out,cfg.nodes[i].id,kill))) {
+					}
+					else {
+						#flag=1;				
+					}
+				}
+			}while(flag==1);
+		}
+		stop;
+	}
+	
+	before node:CFGNode -> {
+		cur_node = node.id;
+		parents:=getparents(cfg, node);
+		foreach(i:int;def(parents[i])) {
+			pid:=parents[i].id;
+			#q_in[cur_node] = union(lookup(q_in,cur_node,kill),lookup(q_out,pid,kill));
+		}
+		#q_out[cur_node] = union(lookup(q_out,cur_node,kill),lookup(q_in,cur_node,kill));
+	}
+
+	after node:CFGNode -> {
+		m[method_name][cur_node] << string(lookup(q_out,cur_node,kill));
+	}
+
+	before node:Expression -> {
+		if(getexprkind(node.kind)=="VARDECL") {
+			foreach(i:int;def(node.variable_decls[i])) {
+				#temp:=lookup(q_out,cur_node,kill);
+				#add(temp,node.variable_decls[i].name);
+				#q_out[cur_node]=temp;
+				add(lookup(q_out,cur_node,kill),node.variable_decls[i].name);
+			}		
+		}
+		foreach(i:int;def(node.expressions[i]))
+			visit(node.expressions[i]);
+		stop;
+	}
+};
+
+visit(p, q_all);
+
+
+
+

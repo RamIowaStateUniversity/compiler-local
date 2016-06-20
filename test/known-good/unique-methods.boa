@@ -1,0 +1,135 @@
+p: Project = input; 
+patterns: output sum[string] of int;
+number : output sum of int;
+num_methods : output sum of int;
+patterns_set : set of string;
+
+getEncodingStr := function(kind: StatementKind) : string {
+    ret := "";
+    switch (kind) {
+        case StatementKind.BREAK:
+            ret = ret + "BRK";
+	        break;
+	    case StatementKind.CASE:
+            ret = ret + "CASE";
+	        break;
+	    case StatementKind.CATCH:
+            ret = ret + "CAT";
+	        break;
+	    case StatementKind.CONTINUE:
+            ret = ret + "CONT";
+	        break;
+	    case StatementKind.DO:
+            ret = ret + "DO";
+	        break;
+	    case StatementKind.EMPTY:
+            ret = ret + "EMP";
+	        break;
+	    case StatementKind.EXPRESSION:
+            ret = ret + "EXP";
+	        break;
+	    case StatementKind.FOR:
+            ret = ret + "FOR";
+	        break;
+	    case StatementKind.IF:
+            ret = ret + "IF";
+	        break;
+	    case StatementKind.LABEL:
+            ret = ret + "LAB";
+	        break;
+	    case StatementKind.OTHER:
+            ret = ret + "OTH";
+	        break;
+	    case StatementKind.RETURN:
+            ret = ret + "RET";
+	        break;
+	    case StatementKind.SWITCH:
+            ret = ret + "SWT";
+	        break;
+	    case StatementKind.SYNCHRONIZED:
+            ret = ret + "SYN";
+	        break;
+	    case StatementKind.THROW:
+            ret = ret + "THR";
+	        break;
+	    case StatementKind.TRY:
+            ret = ret + "TRY";
+	        break;
+	    case StatementKind.TYPEDECL:
+            ret = ret + "TYD";
+	        break;
+	    case StatementKind.WHILE:
+            ret = ret + "WHILE";
+	        break;
+	    case StatementKind.ASSERT:
+            ret = ret + "ASSERT";
+	        break;
+	    default:
+	        break;
+    }
+    ret = ret + ",";
+    return ret;
+};
+
+getMethodEncoding := function(method: Method) : string {
+    patt := "";
+    curr := "";
+    ifelse := false;
+    ifElseCounter := 0;
+    visit(method, visitor {
+        before stmt: Statement -> {
+            if (ifelse) {
+                ifElseCounter++;
+            }
+            if (stmt.kind != StatementKind.BLOCK && stmt.kind != StatementKind.EXPRESSION) {
+        	    if (len(stmt.statements) > 0)
+            	        patt = patt + "{";
+            	curr = getEncodingStr(stmt.kind); #format("%s,", stmt.kind);
+            	patt = patt + curr;
+    	    }
+	        switch (stmt.kind) {
+	            case StatementKind.IF:
+        	        if (len(stmt.statements) == 2) {
+                        ifelse = true;
+        	        }
+	                break;
+	            default:
+	                break;
+	        }
+        }
+        after stmt: Statement -> {
+            if (ifelse) {
+                ifElseCounter--;
+                if (ifElseCounter == 0) {
+                    patt = patt + "ELSE,";
+                    ifelse = false;
+                }
+            }
+            if (stmt.kind != StatementKind.BLOCK)
+        	    if (len(stmt.statements) > 0)
+        	        patt = patt + "},";
+        }
+    });
+    return patt;    
+};
+
+visit(p, visitor {
+	before n: Project -> ifall (i: int; !match(`^java$`, lowercase(n.programming_languages[i]))) stop;
+    
+
+	before n: CodeRepository -> {
+		
+		snapshot := getsnapshot(n);
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
+	before m: Method -> {
+	    num_methods << 1;
+	    pattern := getMethodEncoding(m);
+	   patterns[pattern] << 1; 
+		add(patterns_set, pattern);   
+	}
+});
+
+number << len(patterns_set);

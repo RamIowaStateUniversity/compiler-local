@@ -1,0 +1,156 @@
+m: output collection[string][string][int] of string;
+p: Project = input;
+
+method_name: string;
+type T={gen: set of string, kill: set of string, in: set of string, out: set of string, prev_out: set of string};
+node_var:map[int] of T;
+cfg: CFG;
+cur_node_id:int;
+flag1:=0;
+genset: set of string;
+vardef: string;
+cur_cfg_node:CFGNode;
+killset: T;
+
+# expression visitor to generate new values
+evisitor := visitor {
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL, ExpressionKind.ASSIGN: 
+				add(genset, string(cur_node_id));
+  				break;
+			default: break;
+		}
+	}
+};
+
+# traversal that accumulates generated values
+cfg_def := traversal(node: CFGNode) {
+		cur_node_id=node.id;
+		curr :T;
+		clear(genset);
+		if(def(node.expression)) {
+			visit(node.expression, evisitor);
+		}
+		curr.gen=genset;
+		node_var[cur_node_id]=curr;
+};
+
+# parse node expression to see if a variable if defined or redefined
+node_def := visitor {
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL: 
+				t := cur_cfg_node.expression.variable_decls;
+				vardef = t[0].name;				
+				break;
+			case ExpressionKind.ASSIGN: 
+				t1 := cur_cfg_node.expression.expressions;
+				vardef = t1[0].variable;
+				break;
+			default:
+				flag1 = 1; 
+				break;
+		}
+	}
+};
+
+# update values that are killed
+node_kill := visitor {
+	before node:Expression -> {
+		switch(node.kind) {
+			case ExpressionKind.VARDECL: 
+				t2 := cur_cfg_node.expression.variable_decls;
+				if (t2[0].name == vardef) {
+					add(killset.kill, string(cur_cfg_node.id));
+				}				
+				break;
+			case ExpressionKind.ASSIGN: 
+				t3 := cur_cfg_node.expression.expressions;
+				if (t3[0].variable == vardef) {
+					add(killset.kill, string(cur_cfg_node.id));
+				}
+			default:
+				break;
+		}
+	}
+};
+
+cfg_use := traversal(node: CFGNode) {
+		killset=lookup(node_var, node.id);
+		clear(killset.kill);
+		vardef="";
+		if(def(node.expression)) {
+			cur_cfg_node=node;
+			visit(node.expression,node_def);
+			if(flag1==0) {
+				foreach(j:int;def(cfg.nodes[j])) {
+					if(def(cfg.nodes[j].expression) && cfg.nodes[j].id!=node.id) {
+						cur_cfg_node=cfg.nodes[j];
+						visit(cfg.nodes[j].expression,node_kill);
+					}
+				}
+			}
+			flag1=0;
+		}
+		node_var[node.id]=killset;
+};
+
+cfg_reach_def := traversal(node: CFGNode) {
+		preds:=getPreds(cfg, node);
+		cur_value:=lookup(node_var,node.id);
+		foreach(i:int;def(preds[i])) {			
+			pred:=lookup(node_var,preds[i].id);
+			cur_value.in = union(cur_value.in,pred.out);
+		}
+		cur_value.prev_out=cur_value.out;
+		cur_value.out=union(cur_value.gen,setdifference(cur_value.in,cur_value.kill));
+		node_var[node.id]=cur_value;
+};
+
+reach_def_result := traversal(node: CFGNode) {
+		cur_node:=lookup(node_var,node.id);
+		m["out"][method_name][node.id] << string(cur_node.out);
+};
+
+def := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+		traverse(cfg,TraversalKind.DEEP_ITERATIVE,cfg_def);
+	}
+};
+
+use := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+		traverse(cfg,TraversalKind.DEEP_ITERATIVE,cfg_use);
+	}
+};
+
+# user-defined fix point function that is used for analysis termination.
+fixp := function(nodemap: map[int] of T) : bool {
+	temp_arr:=keys(nodemap);
+	foreach(i:int;def(temp_arr[i])) {	
+		if(difference(temp_arr[i].out, temp_arr[i].prev_out)!=0)
+			return true;	
+	}
+	return false;
+};
+
+reach_def := visitor {
+	before node: Method -> {
+		method_name=node.name;
+		cfg = getcfg(node);
+		do{
+			traverse(cfg,TraversalKind.FORWARD,cfg_reach_def);
+		}while(fixp(node_var));
+
+		traverse(cfg,TraversalKind.SHALLOW_ITERATIVE,reach_def_result);
+	}
+};
+
+visit(p, def);
+visit(p, use);
+visit(p, reach_def);
