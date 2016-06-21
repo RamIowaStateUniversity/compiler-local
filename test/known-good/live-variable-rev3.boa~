@@ -1,5 +1,5 @@
-m: output collection[string][int] of string;
-
+m: output collection[string][string] of string;
+mt : output mean of int;
 p: Project = input;
 
 # program analysis output
@@ -20,18 +20,20 @@ ii:=0;
 no_fixp := 0;
 totalTime : int;
 
+file_name : string;
+
 # parse node expression to see if a variable is defined or redefined
 node_def := visitor {
 	before expr:Expression -> {
 		switch(expr.kind) {
 			case ExpressionKind.VARDECL: 
-				var_decls := cur_cfg_node.expression.variable_decls;
+				var_decls := cur_cfg_node.expr.variable_decls;
 				if(len(var_decls)!=0) {
 					add(killset, splitall(var_decls[0].name,"\\.")[0]);
 				}				
 				break;
 			case ExpressionKind.ASSIGN, ExpressionKind.OP_INC: 
-				exprs := cur_cfg_node.expression.expressions;
+				exprs := cur_cfg_node.expr.expressions;
 				if(len(exprs)!=0) {				
 					add(killset, splitall(exprs[0].variable,"\\.")[0]);
 				}
@@ -54,10 +56,9 @@ node_use := visitor {
 # traversal that gets all variable uses in a method
 cfg_use := traversal(node: CFGNode): T_gen {
 	cur_value : T_gen;
-	init_set : set of string;
-	genset = init_set;
-	if(def(node.expression)) {
-		visit(node.expression, node_use);
+	clear(genset);
+	if(def(node.expr)) {
+		visit(node.expr, node_use);
 	}
 	cur_value = {genset, 0};
 	return cur_value;
@@ -66,19 +67,18 @@ cfg_use := traversal(node: CFGNode): T_gen {
 # traversal that gets all variable defs in a method
 cfg_def := traversal(node: CFGNode): T_kill {
 	cur_value : T_kill;
-	init_set : set of string;
-	killset = init_set;	
-	if (def(node.expression)) {
+	clear(killset);	
+	if (def(node.expr)) {
 		cur_cfg_node = node;
-		visit(node.expression, node_def);
+		visit(node.expr, node_def);
 	}
-	cur_value = {killset, aa};
+	cur_value = {killset, ""};
 	return cur_value;
 };
 
 # cfg live variable analysis
 live := traversal(node: CFGNode): T_inout {
-	succs := getSuccs(cfg, node);
+	succs := getSuccs(node);
 	no_fixp = no_fixp + 1;
 	in_set : set of string;
 	out_set : set of string;
@@ -89,12 +89,9 @@ live := traversal(node: CFGNode): T_inout {
 	}
 	foreach(i:int;def(succs[i])) {
 		succ := getValue(succs[i]);
-		if(!def(succ)) {
-			in_set1 : set of string;
-			out_set1 : set of string;
-			succ = {in_set1, out_set1};
+		if(def(succ)) {
+			cur_val.out = union(cur_val.out,succ.in);
 		}
-		cur_val.out = union(cur_val.out,succ.in);
 	}
 	genTuple := getValue(node, cfg_use);
 	killTuple := getValue(node, cfg_def);
@@ -105,7 +102,7 @@ live := traversal(node: CFGNode): T_inout {
 # print results
 live_var_result := traversal(node: CFGNode) {
 	cur_value := getValue(node, live);
-	m[method_name][node.id] << string(cur_value.in);
+	#m[method_name][node.id] << string(cur_value.in);
 };
 
 # user-defined fix point function that is used for analysis termination.
@@ -116,6 +113,14 @@ fixp1 := fixp(curr, prev: T_inout) : bool {
 };
 
 q_all := visitor {
+	before node: Project -> {
+		if(!(node.name=="boalang/compiler")) {
+			stop;
+		}
+	}
+	before node: ChangedFile -> {
+		file_name = node.name;
+	}
 	before node: CodeRepository -> {
 		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
 		foreach (i: int; def(snapshot[i]))
@@ -125,20 +130,20 @@ q_all := visitor {
 	before node: Method -> {
 		ii=ii+1;
 		method_name = node.name;
-		totalTime = currentTime();
 		cfg = getcfg(node);
 		clear(cfg_use);clear(cfg_def);clear(live);
 		traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
 		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_def);
 		no_fixp = 0;
+		totalTime = currentTime();
 		traverse(cfg, TraversalKind.BACKWARD, live, fixp1);
 		totalTime = currentTime() - totalTime;
-		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, live_var_result);
+		#traverse(cfg, TraversalKind.BACKWARD, live_var_result);
 	}
 	after node: Method -> {
 		if(no_fixp!=0 && len(cfg.nodes)!=0) {
 			if(no_fixp%len(cfg.nodes)==0) {
-				m[method_name][ii] << string(totalTime)+","+string(no_fixp/len(cfg.nodes));
+				m[file_name][method_name] << totalTime;
 			}
 		}
 	}

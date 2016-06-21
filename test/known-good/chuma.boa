@@ -1,10 +1,11 @@
 m: output collection[string][int] of string;
 
 p: Project = input;
-path : output collection[int][string] of int;
-# program analysis output
-type T= {gen: set of string, kill: set of string, in: set of string, out: set of string};
 
+# program analysis output
+type T_gen= {gen: set of string, dummy : int};
+type T_kill= {kill: set of string, dummy : string};
+type T_inout= {in: set of string, out: set of string};
 # cfg of the current method
 cfg: CFG;
 
@@ -15,28 +16,24 @@ genset : set of string;
 killset : set of string;
 
 method_name : string;
-file_name : string;
 ii:=0;
 no_fixp := 0;
-max_stat_count:=0;
-max_branch_count:=0;
-max_loop_count:=0;
-total_time : int;
+totalTime : int;
 
 # parse node expression to see if a variable is defined or redefined
 node_def := visitor {
 	before expr:Expression -> {
 		switch(expr.kind) {
 			case ExpressionKind.VARDECL: 
-				var_decls := cur_cfg_node.expression.variable_decls;
+				var_decls := cur_cfg_node.expr.variable_decls;
 				if(len(var_decls)!=0) {
-					add(killset, var_decls[0].name);
+					add(killset, splitall(var_decls[0].name,"\\.")[0]);
 				}				
 				break;
-			case ExpressionKind.ASSIGN: 
-				exprs := cur_cfg_node.expression.expressions;
+			case ExpressionKind.ASSIGN, ExpressionKind.OP_INC: 
+				exprs := cur_cfg_node.expr.expressions;
 				if(len(exprs)!=0) {				
-					add(killset, exprs[0].variable);
+					add(killset, splitall(exprs[0].variable,"\\.")[0]);
 				}
 				break;
 			default:
@@ -49,90 +46,85 @@ node_def := visitor {
 node_use := visitor {
 	before expr:Expression -> {
 		if(def(expr.variable)) {
-			add(genset, expr.variable);			
+			add(genset, splitall(expr.variable,"\\.")[0]);
 		}
 	}
 };
 
 # traversal that gets all variable uses in a method
-cfg_use := traversal(node: CFGNode): T {
-	cur_value : T;
+cfg_use := traversal(node: CFGNode): T_gen {
+	cur_value : T_gen;
 	init_set : set of string;
 	genset = init_set;
-	if(def(node.expression)) {
-		visit(node.expression, node_use);
+	if(def(node.expr)) {
+		visit(node.expr, node_use);
 	}
-	init_set1 : set of string;
-	cur_value = {genset, init_set1, init_set1, init_set1};
+	cur_value = {genset, 0};
 	return cur_value;
 };
 
 # traversal that gets all variable defs in a method
-cfg_def := traversal(node: CFGNode): T {
-	cur_value := getValue(node);
+cfg_def := traversal(node: CFGNode): T_kill {
+	cur_value : T_kill;
+	init_set : set of string;
+	killset = init_set;	
+	if (def(node.expr)) {
+		cur_cfg_node = node;
+		visit(node.expr, node_def);
+	}
+	cur_value = {killset, ""};
 	return cur_value;
 };
 
 # cfg live variable analysis
-live := traversal(node: CFGNode): T {
-	cur_val := getValue(node);
-	prev_val := getPrevValue(node);
-	if(no_fixp/len(cfg.nodes)!=3) {
-		add(cur_val.in, string(no_fixp));
+live := traversal(node: CFGNode): T_inout {
+	succs := getSuccs(node);
+	no_fixp = no_fixp + 1;
+	in_set : set of string;
+	out_set : set of string;
+	cur_val : T_inout = {in_set, out_set};
+	if(def(getValue(node))) {
+		cur_val1 := getValue(node);
+		cur_val = clone(cur_val1);
 	}
-	no_fixp = no_fixp+1;
-	m["cur"][no_fixp] << string(cur_val.in);
-	if(def(prev_val)) {
-		m["prev"][no_fixp] << string(prev_val.in);
+	foreach(i:int;def(succs[i])) {
+		succ := getValue(succs[i]);
+		if(!def(succ)) {
+			in_set1 : set of string;
+			out_set1 : set of string;
+			succ = {in_set1, out_set1};
+		}
+		cur_val.out = union(cur_val.out,succ.in);
 	}
-	else {
-		m["prev"][no_fixp] << "null";
-	}
+	genTuple := getValue(node, cfg_use);
+	killTuple := getValue(node, cfg_def);
+	cur_val.in = union(genTuple.gen, setdifference(cur_val.out, killTuple.kill));
 	return cur_val;
 };
 
 # print results
 live_var_result := traversal(node: CFGNode) {
-	cur_value := getValue(node);
+	cur_value := getValue(node, live);
 	m[method_name][node.id] << string(cur_value.in);
 };
 
-# user-defined fix point function that is used for analysis termination.
-fixp1 := fixp(curr, prev: T) : bool {	
-	#m["cur"][no_fixp] << string(curr.in);
-	#m["prev"][no_fixp] << string(prev.in);
-	if (difference(curr.in, prev.in) == 0)
-		return true;	
-	return false;
-};
-
 q_all := visitor {
-	before n: Project -> {
-		file_name=n.name;
-	}
 	before node: CodeRepository -> {
 		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
 		foreach (i: int; def(snapshot[i]))
 			visit(snapshot[i]);
 		stop;
 	}
-
 	before node: Method -> {
 		ii=ii+1;
 		method_name = node.name;
-		if(method_name=="live") {
-		cfg = getcfg(node);
-		map1 := traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
-		map2 := traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map1, cfg_def);
-		no_fixp = 0;
-		map2 = traverse(cfg, TraversalKind.BACKWARD, map2, live, fixp1);
-		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map2, live_var_result);
-		}
-	}
-
-	after node: Method -> {
-		if(method_name=="live") {
-		#m["a"][1] << string(no_fixp/len(cfg.nodes));
+		if(method_name=="asTestList") {
+			cfg = getcfg(node);
+			clear(cfg_use);clear(cfg_def);clear(live);
+			traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
+			traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_def);
+			traverse(cfg, TraversalKind.BACKWARD, live);
+			traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, live_var_result);
 		}
 	}
 };

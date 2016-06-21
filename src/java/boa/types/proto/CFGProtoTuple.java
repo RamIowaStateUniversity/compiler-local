@@ -27,7 +27,7 @@ import boa.types.BoaSet;
 import boa.types.BoaType;
 import boa.types.proto.enums.ChangeKindProtoMap;
 import boa.types.proto.enums.FileKindProtoMap;
-import boa.types.BoaProtoList;
+import boa.types.BoaSet;
 /**
  * A {@link CFGProtoTuple}.
  * 
@@ -41,11 +41,13 @@ public class CFGProtoTuple extends BoaProtoTuple {
 		int counter = 0;
 
 		names.put("nodes", counter++);
-		members.add(new BoaProtoList(new CFGNodeProtoTuple()));
+		members.add(new BoaSet(new CFGNodeProtoTuple()));
 
-		names.put("edges", counter++);
-		members.add(new BoaProtoList(new CFGEdgeProtoTuple()));
+		names.put("md", counter++);
+		members.add(new MethodProtoTuple());
 
+		names.put("class_name", counter++);
+		members.add(new BoaString());
 	}
 
 	/**
@@ -58,6 +60,6 @@ public class CFGProtoTuple extends BoaProtoTuple {
 	/** @{inheritDoc} */
 	@Override
 	public String toJavaType() {
-		return "boa.types.Control.CFG";
+		return "boa.graphs.cfg.CFG";
 	}
 }

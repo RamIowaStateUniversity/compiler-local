@@ -63,6 +63,14 @@ public class CFG {
 		// TODO Auto-generated constructor stub
 	}
 
+	public Method getMd() {
+		return md;
+	}
+
+	public String getClass_name() {
+		return class_name;
+	}
+
 	public HashSet<CFGNode> getNodes() {
 		return nodes;
 	}
@@ -144,7 +152,7 @@ public class CFG {
 	}
 
 	public void mergeSeq(CFGNode branch) {
-		//System.out.println("KIND "+branch.getKind());
+		//System.out.println("KIND "+branch.getNodeKind());
 		this.addNode(branch);
 		/*
 		 * branch will not be considered ins node except the input graph is size
@@ -784,7 +792,7 @@ public class CFG {
 		return graph;
 	}
 
-	private CFGNode[] sortNodes() {
+	public CFGNode[] sortNodes() {
 		try {
 			CFGNode[] results = new CFGNode[nodes.size()];
 			
@@ -833,9 +841,9 @@ public class CFG {
 		int numEdges = 0;
 		sb.append("List of edges:" + "\r\n");
 		for (CFGNode node : mynodes) {
-			for (CFGEdge edge : node.getOutEdges()) {
+			for (CFGEdge edge : node.getSuccs()) {
 				CFGNode anoNode = edge.getDest();
-				if (!anoNode.getInEdges().contains(edge)) {
+				if (!anoNode.getPreds().contains(edge)) {
 					System.err.println("ERRORERRORERRORERRORERRORERROR");
 					System.err.println(node.getId() + "-" + anoNode.getId());
 				}
@@ -860,13 +868,13 @@ public class CFG {
 		CFGNode[] sortedNodes = sortNodes();
 		Map<Integer, CFGEdgeLabel> edgeLabels = new HashMap<Integer, CFGEdgeLabel>();
 		for (CFGNode node : sortedNodes) {
-			for (CFGEdge edge : node.getOutEdges()) {
+			for (CFGEdge edge : node.getSuccs()) {
 				CFGNode anoNode = edge.getDest();
-				if (!anoNode.getInEdges().contains(edge)) {
+				if (!anoNode.getPreds().contains(edge)) {
 					System.out.println("Error, wrong edge");
 				}
 				int index = node.getId() * size + anoNode.getId();
-				edgeLabels.put(index, getLabel(edge.getLabel()));
+				edgeLabels.put(index, getLabel(edge.label()));
 			}
 		}
 

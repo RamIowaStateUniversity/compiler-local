@@ -203,12 +203,12 @@ protected void <name>(final <types> <args>) throws Exception
 <endif>
 <if(ret)>
 @Override
-public void traverse(final boa.types.Control.CFGNode node) throws Exception {
+public void traverse(final boa.graphs.cfg.CFGNode node) throws Exception {
 		outputMapObj.put(node.getId(), new <ret>(preTraverse(node)));
 }
 <else>
 @Override
-public void traverse(final boa.types.Control.CFGNode node) throws Exception {
+public void traverse(final boa.graphs.cfg.CFGNode node) throws Exception {
 		preTraverse(node);
 }
 <endif>

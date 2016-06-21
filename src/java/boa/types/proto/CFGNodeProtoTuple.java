@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import boa.types.BoaProtoTuple;
+import boa.types.BoaProtoList;
 import boa.types.BoaString;
 import boa.types.BoaType;
 import boa.types.BoaInt;
@@ -46,10 +47,10 @@ public class CFGNodeProtoTuple extends BoaProtoTuple {
 		names.put("id", counter++);
 		members.add(new BoaInt());
 
-		names.put("statement", counter++);
+		names.put("stmt", counter++);
 		members.add(new StatementProtoTuple());
 
-		names.put("expression", counter++);
+		names.put("expr", counter++);
 		members.add(new ExpressionProtoTuple());
 	}
 
@@ -63,6 +64,6 @@ public class CFGNodeProtoTuple extends BoaProtoTuple {
 	/** @{inheritDoc} */
 	@Override
 	public String toJavaType() {
-		return "boa.types.Control.CFGNode";
+		return "boa.graphs.cfg.CFGNode";
 	}
 }

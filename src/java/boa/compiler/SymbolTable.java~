@@ -149,7 +149,7 @@ public class SymbolTable {
 		//globalFunctions.addFunction("getValue", new BoaFunction(new BoaTuple(Arrays.asList(new BoaType[] {new BoaName(new BoaSet(new BoaString()), "dom"), new BoaName(new BoaSet(new BoaString()), "com")})), new BoaType[] { new CFGNodeProtoTuple() }, "___node_output.get((long)${0}.getId())"));
 		globalFunctions.addFunction("getValue", new BoaFunction(new BoaAny(), new BoaType[] { new CFGNodeProtoTuple(), new BoaTraversal()},"${1}.getValue(${0})"));
 		globalFunctions.addFunction("getValue", new BoaFunction(new BoaAny(), new BoaType[] { new CFGNodeProtoTuple()},"getValue(${0})"));
-		globalFunctions.addFunction("clone", new BoaFunction(new BoaTypeVar("K"), new BoaType[] {new BoaTypeVar("K")},"${0}.clone(${0})"));
+		globalFunctions.addFunction("clone", new BoaFunction(new BoaTypeVar("K"), new BoaType[] {new BoaTypeVar("K")},"${0}.clone()"));
 		globalFunctions.addFunction("clear", new BoaFunction(new BoaAny(), new BoaType[] { new BoaTraversal()},"${0}.clear()"));
 		// map functions
 		globalFunctions.addFunction("haskey", new BoaFunction(new BoaBool(), new BoaType[] { new BoaMap(new BoaScalar(), new BoaScalar()), new BoaScalar() }, "${0}.containsKey(${1})"));

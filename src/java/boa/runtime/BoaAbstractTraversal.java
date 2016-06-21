@@ -24,8 +24,8 @@ import boa.functions.BoaAstIntrinsics;
 
 import boa.types.Ast.*;
 import boa.types.Ast.Expression.*;
-import boa.types.Control.*;
 import boa.types.Graph.*;
+import boa.graphs.cfg.*;
 import boa.types.Code.CodeRepository;
 import boa.types.Code.Revision;
 import boa.types.Diff.ChangedFile;
@@ -88,10 +88,6 @@ public abstract class BoaAbstractTraversal<T1> {
 		return defaultPreTraverse();
 	}
 
-	/*protected boa.types.BoaScalar preTraverse(final CFGNode node) throws Exception {
-		return null;
-	}*/
-
 	protected boolean preTraverse(final Variable node) throws Exception {
 		return defaultPreTraverse();
 	}
@@ -138,7 +134,7 @@ public abstract class BoaAbstractTraversal<T1> {
 		traverse(cfg, kind);
 	}
 
-	public final void traverse(final CFG cfg,final Traversal.TraversalKind kind, final BoaAbstractFixP fixp) throws Exception {
+	public final void traverse(final boa.graphs.cfg.CFG cfg,final Traversal.TraversalKind kind, final BoaAbstractFixP fixp) throws Exception {
 		if(outputMapObj==null) {
 				outputMapObj = new java.util.HashMap<Integer,T1>();
 		}
@@ -148,7 +144,7 @@ public abstract class BoaAbstractTraversal<T1> {
 			traverse(cfg, kind);
 			noOfIterations++;
 			fixp_flag=true;
-			java.util.List<boa.types.Control.CFGNode> nl=cfg.getNodesList();
+			java.util.HashSet<CFGNode> nl=cfg.getNodes();
 			for(CFGNode node : nl) {
 				boolean curFlag=outputMapObj.containsKey(node.getId());
 				boolean prevFlag=prevOutputMapObj.containsKey(node.getId());
@@ -163,33 +159,32 @@ public abstract class BoaAbstractTraversal<T1> {
 		}while(!fixp_flag);
 	}
 
-	public final void traverse(final CFG cfg,final Traversal.TraversalKind kind) throws Exception {
+	public final void traverse(final boa.graphs.cfg.CFG cfg,final Traversal.TraversalKind kind) throws Exception {
 		if (preTraverse(cfg)) {			
 			if(outputMapObj==null) {
 				outputMapObj = new java.util.HashMap<Integer,T1>();
 			}
-			java.util.List<boa.types.Control.CFGEdge> edges=cfg.getEdgesList();
 			java.util.HashMap<Integer,String> nodeVisitStatus=new java.util.HashMap<Integer,String>();
-			int edgeSize=(int)java.lang.Math.sqrt(edges.size());
-			for(int i=0;i<edgeSize;i++) {
-				nodeVisitStatus.put(i,"unvisited");
+			CFGNode[] nl = cfg.sortNodes();
+			//java.util.ArrayList<CFGNode> nl=new java.util.ArrayList<CFGNode>(java.util.Arrays.asList(cfg.sortNodes()));
+			for(int i=0;i<nl.length;i++) {
+				nodeVisitStatus.put(nl[i].getId(),"unvisited");
 			}
-			Queue<Integer> q=new LinkedList<Integer>();
-			java.util.List<boa.types.Control.CFGNode> nl=sortNodes(cfg.getNodesList());
+			Queue<CFGNode> q=new LinkedList<CFGNode>();
 			switch(kind.getNumber()) {
 				case 1:
-					if(nl.size()!=0) {
-						nodeVisitStatus.put(edgeSize-1,"visited");
-						traverse(nl.get(edgeSize-1));
-						q.add(edgeSize-1);
+					if(nl.length!=0) {
+						nodeVisitStatus.put(nl.length-1,"visited");
+						CFGNode node = nl[nl.length-1];
+						traverse(node);
+						q.add(node);
 						while(!q.isEmpty()) {
-							int index=q.peek();
-							for(int i=0;i<edges.size();i+=edgeSize) {
-								if(edges.get(i+index).getLabel().getNumber()!=1 && nodeVisitStatus.get(i/edgeSize).equals("unvisited")) {
-									//System.out.println(i/edgeSize);
-									traverse(nl.get(i/edgeSize));
-									nodeVisitStatus.put(i/edgeSize,"visited");
-									q.add(i/edgeSize);
+							node=q.peek();
+							for(CFGNode pred : node.getInNodes()) {
+								if(nodeVisitStatus.get(pred.getId()).equals("unvisited")) {
+									traverse(pred);
+									nodeVisitStatus.put(pred.getId(),"visited");
+									q.add(pred);
 								}
 							}
 							q.remove();
@@ -197,18 +192,18 @@ public abstract class BoaAbstractTraversal<T1> {
 					}
 					break;
 				case 2:
-					if(nl.size()!=0) {
+					if(nl.length!=0) {
 						nodeVisitStatus.put(0,"visited");
-						traverse(nl.get(0));
-						q.add(0);
+						CFGNode node = nl[0];
+						traverse(node);
+						q.add(node);
 						while(!q.isEmpty()) {
-							int index=q.peek();
-							for(int i=index*edgeSize;i<(index*edgeSize)+edgeSize;i++) {
-								if(edges.get(i).getLabel().getNumber()!=1 && nodeVisitStatus.get(i%edgeSize).equals("unvisited")) {
-									//System.out.println(i%edgeSize);
-									traverse(nl.get(i%edgeSize));
-									nodeVisitStatus.put(i%edgeSize,"visited");
-									q.add(i%edgeSize);		
+							node=q.peek();
+							for(CFGNode succ : node.getOutNodes()) {
+								if(nodeVisitStatus.get(succ.getId()).equals("unvisited")) {
+									traverse(succ);
+									nodeVisitStatus.put(succ.getId(),"visited");
+									q.add(succ);
 								}
 							}
 							q.remove();
@@ -216,18 +211,18 @@ public abstract class BoaAbstractTraversal<T1> {
 					}
 					break;
 				case 3:
-					for(boa.types.Control.CFGNode cfgnode:nl) {
+					for(CFGNode cfgnode:nl) {
 						traverse(cfgnode);
-						if(cfgnode.getStatement()!=null) {
-							traverse(cfgnode.getStatement());
+						if(cfgnode.getStmt()!=null) {
+							traverse(cfgnode.getStmt());
 						}
-						if(cfgnode.getExpression()!=null) {
-							traverse(cfgnode.getExpression());
+						if(cfgnode.getExpr()!=null) {
+							traverse(cfgnode.getExpr());
 						}
 					}
 					break;
 				case 4:
-					for(boa.types.Control.CFGNode cfgnode:nl) {
+					for(CFGNode cfgnode:nl) {
 						traverse(cfgnode);
 					}
 					break;
@@ -236,33 +231,7 @@ public abstract class BoaAbstractTraversal<T1> {
 		}
 	}
 
-	public final java.util.List<boa.types.Control.CFGNode> sortNodes(final java.util.List<boa.types.Control.CFGNode> nodeList) {
-		java.util.List<boa.types.Control.CFGNode> nl=new java.util.ArrayList<boa.types.Control.CFGNode>();
-		for(boa.types.Control.CFGNode cn:nodeList) {
-			int flag=0;
-			if(nl.size()>0) {
-				for(int i=0;i<nl.size();i++) {
-					if(nl.get(i).getId()>cn.getId()) {
-						nl.add(i, cn);
-						flag=1;	
-						break;			
-					}
-				}
-				if(flag==0) {
-				nl.add(cn);
-				}
-				flag=0;
-			}
-			else {
-				nl.add(cn);			
-			}
-		}
-		return nl;
-	}
-
 	public void traverse(final CFGNode node) throws Exception {
-		//preTraverse(node);
-		//postTraverse(node);
 	}
 
 	public final void traverse(final Variable node) throws Exception {
