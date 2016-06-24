@@ -1,0 +1,7 @@
+#!/bin/bash
+
+BASEDIR=$(dirname "$0")
+
+java -cp .:$BASEDIR/dist/boa-compiler.jar:$BASEDIR/lib/* boa.compiler.BoaCompiler -i /home/ram/Desktop/compiler-git/compiler-local/test/known-good/chuma.boa
+
+#java -cp .:$BASEDIR/dist/boa-compiler.jar:$BASEDIR/lib/* boa.compiler.Test

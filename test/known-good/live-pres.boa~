@@ -1,12 +1,11 @@
 m: output collection[string][int] of string;
-
+mt : output collection of int;
 p: Project = input;
 
 # program analysis output
-type T= {gen: set of string, kill: set of string, in: set of string, out: set of string};
-
-# cfg of the current method
-cfg: CFG;
+type T_gen= {gen: set of string};
+type T_kill= {kill: set of string};
+type T_inout= {in: set of string, out: set of string};
 
 # current visiting cfg node
 cur_cfg_node: CFGNode;
@@ -21,15 +20,15 @@ node_def := visitor {
 	before expr:Expression -> {
 		switch(expr.kind) {
 			case ExpressionKind.VARDECL: 
-				var_decls := cur_cfg_node.expression.variable_decls;
+				var_decls := cur_cfg_node.expr.variable_decls;
 				if(len(var_decls)!=0) {
-					add(killset, var_decls[0].name);
+					add(killset, splitall(var_decls[0].name,"\\.")[0]);
 				}				
 				break;
-			case ExpressionKind.ASSIGN: 
-				exprs := cur_cfg_node.expression.expressions;
+			case ExpressionKind.ASSIGN, ExpressionKind.OP_INC: 
+				exprs := cur_cfg_node.expr.expressions;
 				if(len(exprs)!=0) {				
-					add(killset, exprs[0].variable);
+					add(killset, splitall(exprs[0].variable,"\\.")[0]);
 				}
 				break;
 			default:
@@ -42,70 +41,92 @@ node_def := visitor {
 node_use := visitor {
 	before expr:Expression -> {
 		if(def(expr.variable)) {
-			add(genset, expr.variable);			
+			if(len(expr.expressions)!=0) {
+				add(genset, "this."+expr.variable);
+			}
+			else {
+				add(genset, splitall(expr.variable,"\\.")[0]);
+			}
 		}
 	}
 };
 
 # traversal that gets all variable uses in a method
-cfg_use := traversal(node: CFGNode): T {
-	cur_value : T;
-	init_set : set of string;
-	genset = init_set;
-	if(def(node.expression)) {
-		visit(node.expression, node_use);
+cfg_use := traversal(node: CFGNode): T_gen {
+	cur_value : T_gen;
+	clear(genset);
+	if(def(node.expr)) {
+		visit(node.expr, node_use);
 	}
-	init_set1 : set of string;
-	cur_value = {genset, init_set1, init_set1, init_set1};
+	cur_value = {genset};
 	return cur_value;
 };
 
 # traversal that gets all variable defs in a method
-cfg_def := traversal(node: CFGNode): T {
-	cur_value := getValue(node);
-	init_set : set of string;
-	killset = init_set;	
-	if (def(node.expression)) {
+cfg_def := traversal(node: CFGNode): T_kill {
+	cur_value : T_kill;
+	clear(killset);	
+	if (def(node.expr)) {
 		cur_cfg_node = node;
-		visit(node.expression, node_def);
+		visit(node.expr, node_def);
 	}
-	cur_value.kill = killset;
+	cur_value = {killset};
 	return cur_value;
 };
 
 # cfg live variable analysis
-live := traversal(node: CFGNode): T {
-	succs:=getSuccs(cfg, node);
-	cur_val := getValue(node);
-	foreach(i:int;def(succs[i])) {
-		succ := getValue(succs[i]);
-		cur_val.out = union(cur_val.out,succ.in);
+live := traversal(node: CFGNode): T_inout {
+	succs := getSuccs(node);
+	in_set : set of string;
+	out_set : set of string;
+	cur_val : T_inout = {in_set, out_set};
+	if(def(getValue(node))) {
+		cur_val1 := getValue(node);
+		cur_val = clone(cur_val1);
 	}
-	cur_val.in = union(cur_val.gen, setdifference(cur_val.out, cur_val.kill));
+	foreach(succ_node:CFGNode=succs) {
+		succ := getValue(succ_node);
+		if(def(succ)) {
+			cur_val.out = union(cur_val.out,succ.in);
+		}
+	}
+	genTuple := getValue(node, cfg_use);
+	killTuple := getValue(node, cfg_def);
+	cur_val.in = union(genTuple.gen, setdifference(cur_val.out, killTuple.kill));
 	return cur_val;
 };
 
 # print results
 live_var_result := traversal(node: CFGNode) {
-	cur_value := getValue(node);
+	cur_value := getValue(node, live);
 	m[method_name][node.id] << string(cur_value.in);
 };
 
 # user-defined fix point function that is used for analysis termination.
-fixp_in := fixp(curr, prev: T) : bool {
+fixp1 := fixp(curr, prev: T_inout) : bool {
 	if (difference(curr.in, prev.in) == 0)
 		return true;	
 	return false;
 };
 
 q_all := visitor {
+	before node: ChangedFile -> {
+		file_name = node.name;
+	}
+	before node: CodeRepository -> {
+		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
+		foreach (i: int; def(snapshot[i]))
+			visit(snapshot[i]);
+		stop;
+	}
 	before node: Method -> {
 		method_name = node.name;
-		cfg = getcfg(node);
-		map1 := traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
-		map2 := traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map1, cfg_def);
-		map2 = traverse(cfg, TraversalKind.BACKWARD, map2, live, fixp_in);
-		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, map2, live_var_result);
+		cfg := getcfg(node);
+		clear(cfg_use);clear(cfg_def);clear(live);
+		traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
+		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_def);
+		traverse(cfg, TraversalKind.BACKWARD, live, fixp1);
+		traverse(cfg, TraversalKind.BACKWARD, live_var_result);
 	}
 };
 

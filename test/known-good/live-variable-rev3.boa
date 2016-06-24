@@ -1,5 +1,5 @@
-m: output collection[string][string] of string;
-mt : output mean of int;
+m: output collection[string][int] of string;
+mt : output collection of int;
 p: Project = input;
 
 # program analysis output
@@ -48,7 +48,12 @@ node_def := visitor {
 node_use := visitor {
 	before expr:Expression -> {
 		if(def(expr.variable)) {
-			add(genset, splitall(expr.variable,"\\.")[0]);
+			if(len(expr.expressions)!=0) {
+				add(genset, "this."+expr.variable);
+			}
+			else {
+				add(genset, splitall(expr.variable,"\\.")[0]);
+			}
 		}
 	}
 };
@@ -87,8 +92,8 @@ live := traversal(node: CFGNode): T_inout {
 		cur_val1 := getValue(node);
 		cur_val = clone(cur_val1);
 	}
-	foreach(i:int;def(succs[i])) {
-		succ := getValue(succs[i]);
+	foreach(succ_node:CFGNode=succs) {
+		succ := getValue(succ_node);
 		if(def(succ)) {
 			cur_val.out = union(cur_val.out,succ.in);
 		}
@@ -113,11 +118,11 @@ fixp1 := fixp(curr, prev: T_inout) : bool {
 };
 
 q_all := visitor {
-	before node: Project -> {
-		if(!(node.name=="boalang/compiler")) {
-			stop;
-		}
-	}
+	#before node: Project -> {
+	#	if(!(node.name=="boalang/compiler")) {
+	#		stop;
+	#	}
+	#}
 	before node: ChangedFile -> {
 		file_name = node.name;
 	}
@@ -143,7 +148,10 @@ q_all := visitor {
 	after node: Method -> {
 		if(no_fixp!=0 && len(cfg.nodes)!=0) {
 			if(no_fixp%len(cfg.nodes)==0) {
-				m[file_name][method_name] << string(totalTime);
+				if(totalTime!=0) {
+				mt << totalTime;
+				}
+				#m[file_name][method_name] << string(totalTime);
 			}
 		}
 	}

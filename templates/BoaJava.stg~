@@ -77,7 +77,7 @@ for (<type> ___<index> = 0; ___<index> \< <len>; ___<index>++)
 	<endif>
 }
 <else>
-for (<type> ___<index> : <expression>)
+for (<type> ___<index> : <len>)
 {
 	<statement>
 }

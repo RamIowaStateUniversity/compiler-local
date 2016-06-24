@@ -340,7 +340,7 @@ foreachStatement returns [ForeachStatement ast]
 	@after { $ast.setPositions($l, $c, getEndLine(), getEndColumn()); }
 	: FOREACH LPAREN id=identifier COLON t=type SEMICOLON e=expression RPAREN s=programStatement { $ast = new ForeachStatement(new Component($id.ast, $t.ast), $e.ast, $s.ast);}
 	  |
-	FOREACH LPAREN id=identifier COLON t=type EQUALS e=expression RPAREN s=programStatement { $ast = new ForeachStatement(new Component($id.ast, $t.ast), $e.ast, $s.ast); $ast.setIsEnhancedForEach(true);}
+	FOREACH LPAREN id=identifier COLON t=type EQUALS id2=identifier RPAREN s=programStatement { $ast = new ForeachStatement(new Component($id.ast, $t.ast), null, $s.ast); $ast.setIsEnhancedForEach(true);}
 	;
 
 existsStatement returns [ExistsStatement ast]

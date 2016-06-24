@@ -211,16 +211,16 @@ public class BoaGraphIntrinsics {
 		return nl;
 	}
 
-	@FunctionSpec(name = "getPreds", returnType = "array of CFGNode", formalParameters = { "CFGNode" })
-	public static CFGNode[] getPreds(final CFGNode node) {
-		HashSet<CFGNode> preds=node.getInNodes();		
-		return preds.toArray(new CFGNode[preds.size()]);
+	@FunctionSpec(name = "getPreds", returnType = "set of CFGNode", formalParameters = { "CFGNode" })
+	public static HashSet<CFGNode> getPreds(final CFGNode node) {
+		return node.getInNodes();		
+		//return preds.toArray(new CFGNode[preds.size()]);
 	}
 
-	@FunctionSpec(name = "getSuccs", returnType = "array of CFGNode", formalParameters = {"CFGNode" })
-	public static CFGNode[] getSuccs(final CFGNode node) {
-		HashSet<CFGNode> succs=node.getOutNodes();		
-		return succs.toArray(new CFGNode[succs.size()]);
+	@FunctionSpec(name = "getSuccs", returnType = "set of CFGNode", formalParameters = {"CFGNode" })
+	public static HashSet<CFGNode> getSuccs(final CFGNode node) {
+		return node.getOutNodes();		
+		//return succs.toArray(new CFGNode[succs.size()]);
 	}
 
 	@FunctionSpec(name = "union", returnType = "set of string", formalParameters = { "set of string","set of string" })

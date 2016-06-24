@@ -1071,14 +1071,20 @@ public class CodeGeneratingVisitor extends AbstractCodeGeneratingVisitor {
 	public void visit(final ExistsStatement n) {
 		final ST st = stg.getInstanceOf("WhenStatement");
 		st.add("some", "true");
-		generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "exists", st);
+		generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "exists", false, st);
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void visit(final ForeachStatement n) {
 		final ST st = stg.getInstanceOf("WhenStatement");
-		generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "foreach", st);
+		if(n.getIsEnhancedForEach()) {
+			st.add("enhanced", "true");
+			generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "foreach", true, st);
+		}
+		else {
+			generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "foreach", false, st);
+		}
 	}
 
 	/** {@inheritDoc} */
@@ -1086,10 +1092,10 @@ public class CodeGeneratingVisitor extends AbstractCodeGeneratingVisitor {
 	public void visit(final IfAllStatement n) {
 		final ST st = stg.getInstanceOf("WhenStatement");
 		st.add("all", "true");
-		generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "ifall", st);
+		generateQuantifier(n, n.getVar(), n.getCondition(), n.getBody(), "ifall", false, st);
 	}
 
-	protected void generateQuantifier(final Node n, final Component c, final Expression e, final Block b, final String kind, final ST st) {
+	protected void generateQuantifier(final Node n, final Component c, final Expression e, final Block b, final String kind, boolean enhanced, final ST st) {
 		final BoaType type = c.getType().type;
 
 		final String id = c.getIdentifier().getToken();
@@ -1097,38 +1103,41 @@ public class CodeGeneratingVisitor extends AbstractCodeGeneratingVisitor {
 		n.env.set(id, type);
 		st.add("type", type.toJavaType());
 		st.add("index", id);
+		if(!enhanced) {
+			this.indexeeFinder.start(e, id);
+			final Set<Node> indexees = this.indexeeFinder.getIndexees();
+			if (indexees.size() > 0) {
+				final List<Node> array = new ArrayList<Node>(indexees);
+				String src = "";
+				for (int i = 0; i < array.size(); i++) {
+					final Factor indexee = (Factor)array.get(i);
 
-		this.indexeeFinder.start(e, id);
-		final Set<Node> indexees = this.indexeeFinder.getIndexees();
-	
-		if (indexees.size() > 0) {
-			final List<Node> array = new ArrayList<Node>(indexees);
-			String src = "";
-			for (int i = 0; i < array.size(); i++) {
-				final Factor indexee = (Factor)array.get(i);
+					this.skipIndex = id;
+					indexee.accept(this);
+					final String src2 = code.removeLast();
+					this.skipIndex = "";
 
-				this.skipIndex = id;
-				indexee.accept(this);
-				final String src2 = code.removeLast();
-				this.skipIndex = "";
+					final BoaType indexeeType = this.indexeeFinder.getFactors().get(indexee).type;
+					final String func = (indexeeType instanceof BoaArray) ? ".length" : ".size()";
 
-				final BoaType indexeeType = this.indexeeFinder.getFactors().get(indexee).type;
-				final String func = (indexeeType instanceof BoaArray) ? ".length" : ".size()";
+					if (src.length() > 0)
+						src = "java.lang.Math.min(" + src2 + func + ", " + src + ")";
+					else
+						src = src2 + func;
+				}
 
-				if (src.length() > 0)
-					src = "java.lang.Math.min(" + src2 + func + ", " + src + ")";
-				else
-					src = src2 + func;
+				st.add("len", src);
+			} else {
+				throw new TypeCheckException(e, "quantifier variable '" + id + "' must be used in the " + kind + " condition expression");
 			}
 
-			st.add("len", src);
-		} else {
-			throw new TypeCheckException(e, "quantifier variable '" + id + "' must be used in the " + kind + " condition expression");
+			e.accept(this);
+			st.add("expression", code.removeLast());
 		}
-
-		e.accept(this);
-		st.add("expression", code.removeLast());
-
+		else {
+			e.accept(this);
+			st.add("expression", code.removeLast().split("!=")[0].split("\\(")[1]);
+		}
 		b.accept(this);
 		st.add("statement", code.removeLast());
 

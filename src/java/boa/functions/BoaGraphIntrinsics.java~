@@ -218,7 +218,7 @@ public class BoaGraphIntrinsics {
 	}
 
 	@FunctionSpec(name = "getSuccs", returnType = "array of CFGNode", formalParameters = {"CFGNode" })
-	public static boa.types.Control.CFGNode[] getSuccs(final CFGNode node) {
+	public static CFGNode[] getSuccs(final CFGNode node) {
 		HashSet<CFGNode> succs=node.getOutNodes();		
 		return succs.toArray(new CFGNode[succs.size()]);
 	}

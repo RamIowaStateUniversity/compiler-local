@@ -95,7 +95,6 @@ public class ForeachStatement extends Statement {
 
 	public ForeachStatement clone() {
 		final ForeachStatement s = new ForeachStatement(var.clone(), condition.clone(), body.clone());
-		s.isEnhancedForEach = this.isEnhancedForEach;
 		copyFieldsTo(s);
 		return s;
 	}
