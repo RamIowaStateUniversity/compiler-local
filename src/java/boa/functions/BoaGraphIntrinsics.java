@@ -97,7 +97,7 @@ public class BoaGraphIntrinsics {
 		return 1;
 	}
 */
-	@FunctionSpec(name = "getOutEdges", returnType = "array of string", formalParameters = { "Method" })
+/*	@FunctionSpec(name = "getOutEdges", returnType = "array of string", formalParameters = { "Method" })
 	public static String[] getOutEdges(final Method method) {
 		hashmap.clear();
 		CFG cfg = new CFG(method);
@@ -111,7 +111,7 @@ public class BoaGraphIntrinsics {
 		resultArr = result.toArray(resultArr);
 		return resultArr;
 	}
-
+*/
 	@FunctionSpec(name = "getedges", returnType = "string", formalParameters = { "CFG" })
 	public static String getedges(final boa.types.Control.CFG cfg) {
 		java.util.List<boa.types.Control.CFGEdge> edges=cfg.getEdgesList();
@@ -133,58 +133,56 @@ public class BoaGraphIntrinsics {
 		cfg.astToCFG();
 		
 		CFGNode[] mynodes = cfg.sortNodes(cfg);
-		String result="Method Name : "+method.getName()+"\nNo of Nodes : "+mynodes.length+"\n";	
+		String result="";	
 		for(CFGNode node:mynodes) {
 			result+=node.newBuilder().build().toString()+"\n";
 		}
 		
 		for (CFGNode node : mynodes) {
-			for (CFGEdge edge : node.getSuccs()) {
+			for (CFGEdge edge : node.getOutEdges()) {
 				CFGNode anoNode = edge.getDest();
-				if (!anoNode.getPreds().contains(edge)) {
+				if (!anoNode.getInEdges().contains(edge)) {
 					System.err.println("ERRORERRORERRORERRORERRORERROR");
 					System.err.println(node.getId() + "-" + anoNode.getId());
 				}
-				result+="node " + node.getId() + " --> node "
-						+ anoNode.getId() + "\r\n";
+				result+="node " + node.getId() + " --> node "+ anoNode.getId() + "\r\n";
 			}
 		}
 
 		return result;
 	}
 
-	@FunctionSpec(name = "getdetails", returnType = "string", formalParameters = { "Method" })
-	public static String getdetails(final Method method) {
+	@FunctionSpec(name = "getdetails", returnType = "int", formalParameters = { "Method" })
+	public static int getdetails(final Method method) {
 		CFG cur_cfg = new CFG(method);
 		cur_cfg.astToCFG();
-		boa.types.Control.CFG cfg = cur_cfg.newBuilder().build();
-		java.util.List<boa.types.Control.CFGEdge> edges=cfg.getEdgesList();
+		int count=0;
 		java.util.HashMap<Integer,String> nodeVisitStatus=new java.util.HashMap<Integer,String>();
-		int edgeSize=(int)java.lang.Math.sqrt(edges.size());
-		for(int i=0;i<edgeSize;i++) {
-			nodeVisitStatus.put(i,"unvisited");
+		CFGNode[] nl = cur_cfg.sortNodes();
+		//java.util.ArrayList<CFGNode> nl=new java.util.ArrayList<CFGNode>(java.util.Arrays.asList(cfg.sortNodes()));
+		for(int i=0;i<nl.length;i++) {
+			nodeVisitStatus.put(nl[i].getId(),"unvisited");
 		}
-		Queue<Integer> q=new LinkedList<Integer>();
-		java.util.List<boa.types.Control.CFGNode> nl=sortNodes(cfg.getNodesList());
-		if(nl.size()!=0) {
-						nodeVisitStatus.put(0,"visited");
-						q.add(0);
-						while(!q.isEmpty()) {
-							int index=q.peek();
-							System.out.println(index);
-							for(int i=index*edgeSize;i<(index*edgeSize)+edgeSize;i++) {
-								if(edges.get(i).getLabel().getNumber()!=1 && nodeVisitStatus.get(i%edgeSize).equals("unvisited")) {
-								if(index==29) {
-									System.out.println("---"+edges.get(i).getLabel().getNumber());
-								}
-									nodeVisitStatus.put(i%edgeSize,"visited");
-									q.add(i%edgeSize);		
-								}
-							}
-							q.remove();
-						}
+		Queue<CFGNode> q=new LinkedList<CFGNode>();
+		if(nl.length!=0) {
+			nodeVisitStatus.put(nl.length-1,"visited");
+			CFGNode node = nl[nl.length-1];
+			q.add(node);
+			//System.out.println(node.getId());
+			while(!q.isEmpty()) {
+				node=q.peek();
+				for(CFGNode pred : node.getInNodes()) {
+					if(nodeVisitStatus.get(pred.getId()).equals("unvisited")) {
+						//System.out.println(pred.getId());
+						nodeVisitStatus.put(pred.getId(),"visited");
+						q.add(pred);
+					}
+				}
+				q.remove();
+			}
 		}
-		return "";
+
+		return count;
 	}
 
 	public static final java.util.List<boa.types.Control.CFGNode> sortNodes(final java.util.List<boa.types.Control.CFGNode> nodeList) {
@@ -211,17 +209,17 @@ public class BoaGraphIntrinsics {
 		return nl;
 	}
 
-	@FunctionSpec(name = "getPreds", returnType = "set of CFGNode", formalParameters = { "CFGNode" })
+	/*@FunctionSpec(name = "getPreds", returnType = "set of CFGNode", formalParameters = { "CFGNode" })
 	public static HashSet<CFGNode> getPreds(final CFGNode node) {
 		return node.getInNodes();		
 		//return preds.toArray(new CFGNode[preds.size()]);
-	}
+	}*/
 
-	@FunctionSpec(name = "getSuccs", returnType = "set of CFGNode", formalParameters = {"CFGNode" })
+	/*@FunctionSpec(name = "getSuccs", returnType = "set of CFGNode", formalParameters = {"CFGNode" })
 	public static HashSet<CFGNode> getSuccs(final CFGNode node) {
 		return node.getOutNodes();		
 		//return succs.toArray(new CFGNode[succs.size()]);
-	}
+	}*/
 
 	@FunctionSpec(name = "union", returnType = "set of string", formalParameters = { "set of string","set of string" })
 	public static HashSet<String> union(final HashSet<String> set1,final HashSet<String> set2) {

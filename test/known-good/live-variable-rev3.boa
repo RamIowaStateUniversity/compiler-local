@@ -1,4 +1,4 @@
-m: output collection[string][int] of string;
+m: output collection[string] of int;
 mt : output collection of int;
 p: Project = input;
 
@@ -14,13 +14,13 @@ cur_cfg_node: CFGNode;
 
 genset : set of string;
 killset : set of string;
-
-method_name : string;
-ii:=0;
-no_fixp := 0;
 totalTime : int;
+time1 : int;
+tottime := 0;
 
-file_name : string;
+no_fixp := 0;
+
+project_name : string;
 
 # parse node expression to see if a variable is defined or redefined
 node_def := visitor {
@@ -83,7 +83,7 @@ cfg_def := traversal(node: CFGNode): T_kill {
 
 # cfg live variable analysis
 live := traversal(node: CFGNode): T_inout {
-	succs := getSuccs(node);
+	succs := node.successors;
 	no_fixp = no_fixp + 1;
 	in_set : set of string;
 	out_set : set of string;
@@ -105,10 +105,10 @@ live := traversal(node: CFGNode): T_inout {
 };
 
 # print results
-live_var_result := traversal(node: CFGNode) {
-	cur_value := getValue(node, live);
-	#m[method_name][node.id] << string(cur_value.in);
-};
+#live_var_result := traversal(node: CFGNode) {
+#	cur_value := getValue(node, live);
+#	m["a"][method_name][node.id] << string(cur_value.in);
+#};
 
 # user-defined fix point function that is used for analysis termination.
 fixp1 := fixp(curr, prev: T_inout) : bool {
@@ -118,13 +118,11 @@ fixp1 := fixp(curr, prev: T_inout) : bool {
 };
 
 q_all := visitor {
-	#before node: Project -> {
-	#	if(!(node.name=="boalang/compiler")) {
-	#		stop;
-	#	}
-	#}
-	before node: ChangedFile -> {
-		file_name = node.name;
+	before node: Project -> {
+		project_name = node.name;
+	}
+	after node: Project -> {
+		m[project_name] << tottime;
 	}
 	before node: CodeRepository -> {
 		snapshot := getsnapshot(node, "SOURCE_JAVA_JLS");
@@ -133,26 +131,19 @@ q_all := visitor {
 		stop;
 	}
 	before node: Method -> {
-		ii=ii+1;
-		method_name = node.name;
 		cfg = getcfg(node);
 		clear(cfg_use);clear(cfg_def);clear(live);
 		traverse(cfg, TraversalKind.DEEP_ITERATIVE, cfg_use);
 		traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, cfg_def);
 		no_fixp = 0;
-		totalTime = currentTime();
+		curTime := currentTime();
 		traverse(cfg, TraversalKind.BACKWARD, live, fixp1);
-		totalTime = currentTime() - totalTime;
-		#traverse(cfg, TraversalKind.BACKWARD, live_var_result);
+		time1 = currentTime() - curTime;
+		#traverse(cfg, TraversalKind.SHALLOW_ITERATIVE, live_var_result);
 	}
 	after node: Method -> {
 		if(no_fixp!=0 && len(cfg.nodes)!=0) {
-			if(no_fixp%len(cfg.nodes)==0) {
-				if(totalTime!=0) {
-				mt << totalTime;
-				}
-				#m[file_name][method_name] << string(totalTime);
-			}
+				tottime = tottime + time1;
 		}
 	}
 };

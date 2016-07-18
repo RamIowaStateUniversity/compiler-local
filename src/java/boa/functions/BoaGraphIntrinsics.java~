@@ -97,20 +97,6 @@ public class BoaGraphIntrinsics {
 		return 1;
 	}
 */
-	@FunctionSpec(name = "getOutEdges", returnType = "array of string", formalParameters = { "Method" })
-	public static String[] getOutEdges(final Method method) {
-		hashmap.clear();
-		CFG cfg = new CFG(method);
-		cfg.astToCFG();	
-		cfg.newBuilder().build();
-		HashSet<String> result= new HashSet<String>();
-		for(CFGNode node : cfg.getNodes()) {
-			result.add(String.valueOf(node.succs.size()));
-		}
-		String[] resultArr = new String[result.size()];
-		resultArr = result.toArray(resultArr);
-		return resultArr;
-	}
 
 	@FunctionSpec(name = "getedges", returnType = "string", formalParameters = { "CFG" })
 	public static String getedges(final boa.types.Control.CFG cfg) {
@@ -211,16 +197,16 @@ public class BoaGraphIntrinsics {
 		return nl;
 	}
 
-	@FunctionSpec(name = "getPreds", returnType = "array of CFGNode", formalParameters = { "CFGNode" })
-	public static CFGNode[] getPreds(final CFGNode node) {
-		HashSet<CFGNode> preds=node.getInNodes();		
-		return preds.toArray(new CFGNode[preds.size()]);
+	@FunctionSpec(name = "getPreds", returnType = "set of CFGNode", formalParameters = { "CFGNode" })
+	public static HashSet<CFGNode> getPreds(final CFGNode node) {
+		return node.getInNodes();		
+		//return preds.toArray(new CFGNode[preds.size()]);
 	}
 
-	@FunctionSpec(name = "getSuccs", returnType = "array of CFGNode", formalParameters = {"CFGNode" })
-	public static CFGNode[] getSuccs(final CFGNode node) {
-		HashSet<CFGNode> succs=node.getOutNodes();		
-		return succs.toArray(new CFGNode[succs.size()]);
+	@FunctionSpec(name = "getSuccs", returnType = "set of CFGNode", formalParameters = {"CFGNode" })
+	public static HashSet<CFGNode> getSuccs(final CFGNode node) {
+		return node.getOutNodes();		
+		//return succs.toArray(new CFGNode[succs.size()]);
 	}
 
 	@FunctionSpec(name = "union", returnType = "set of string", formalParameters = { "set of string","set of string" })

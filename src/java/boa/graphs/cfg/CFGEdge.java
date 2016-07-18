@@ -117,8 +117,8 @@ public class CFGEdge {
 	}
 
 	public void delete() {
-		this.src.getSuccs().remove(this);
-		this.dest.getPreds().remove(this);
+		this.src.getOutEdges().remove(this);
+		this.dest.getInEdges().remove(this);
 	}
 
 	public CFGEdge(long id, CFGNode src, CFGNode dest) {

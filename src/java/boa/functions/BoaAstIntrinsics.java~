@@ -207,8 +207,8 @@ public class BoaAstIntrinsics {
 		final Configuration conf = new Configuration();
 		try {
 			final FileSystem fs = FileSystem.get(conf);
-			//final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-boalang")));
-			final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-test")));
+			final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-alias")));
+			//final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-test")));
 			//final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-boalang")));
 			//final Path p = new Path("hdfs://localhost:54310/",new Path(context.getConfiguration().get("boa.ast.dir", context.getConfiguration().get("boa.input.dir", "repcache/live")),new Path("ast-ant")));
 			//final Path p = new Path("/home/ram/Desktop/work-test/tmprepcache/sorted/ast-Ram-0-1466142057.seq");

@@ -2,11 +2,14 @@ m: output collection[string][int] of string;
 
 p: Project = input;
 
-genset : array of string;
+q_all := visitor {
+	before node: Project -> {
+		if(!(node.name=="boalang/compiler"))
+			stop;
+	}
+	before node: ChangedFile -> {
+		project_name = node.name;
+	}
+	
+};
 
-genset[0]= "a";
-genset[1]= "b";
-
-foreach(gen : int; def(genset[gen])) {
-	m["a"][1] << genset[gen];
-}

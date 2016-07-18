@@ -47,13 +47,21 @@ public class CFGNode {
 	private String pid;
 	private Statement stmt;
 	private Expression expr;
+	
+	private Expression rhs;
 
 	public static HashMap<String, Integer> idOfLabel = new HashMap<String, Integer>();
 	public static HashMap<Integer, String> labelOfID = new HashMap<Integer, String>();
 
-	public HashSet<CFGEdge> preds = new HashSet<CFGEdge>();
-	public HashSet<CFGEdge> succs = new HashSet<CFGEdge>();
+	public HashSet<CFGEdge> inEdges = new HashSet<CFGEdge>();
+	public HashSet<CFGEdge> outEdges = new HashSet<CFGEdge>();
 
+	public HashSet<CFGNode> predecessors = new HashSet<CFGNode>();
+	public HashSet<CFGNode> successors = new HashSet<CFGNode>();
+
+	public HashSet<String> useVariables = new HashSet<String>();
+	public HashSet<String> defVariables = new HashSet<String>();
+	
 	public CFGNode() {
 		// TODO Auto-generated constructor stub
 		this.id = ++numOfNodes;
@@ -105,6 +113,12 @@ public class CFGNode {
 		return this.stmt;
 	}
 
+	public HashSet<String> getDefUse() {
+		HashSet<String> defUse = new HashSet<String>(defVariables);
+		defUse.addAll(useVariables);
+		return defUse;
+	}
+
 	public boolean hasStmt() {
 		if(this.stmt!=null) {
 			return true;
@@ -116,8 +130,23 @@ public class CFGNode {
 		return this.expr;
 	}
 
+	public Expression getRhs() {
+		return this.rhs;
+	}
+
+	public void setRhs(Expression rhs) {
+		this.rhs = rhs;
+	}
+
 	public boolean hasExpr() {
 		if(this.expr!=null) {
+			return true;
+		}
+		return false;
+	}
+
+	public boolean hasRhs() {
+		if(this.rhs!=null) {
 			return true;
 		}
 		return false;
@@ -153,6 +182,14 @@ public class CFGNode {
 		return parameters;
 	}
 
+	public void setUseVariables(HashSet<String> useVariables) {
+		this.useVariables = useVariables;
+	}
+
+	public void setDefVariables(HashSet<String> defVariables) {
+		this.defVariables = defVariables;
+	}
+
 	public int getClassNameId() {
 		return classNameId;
 	}
@@ -169,38 +206,62 @@ public class CFGNode {
 		return labelOfID.get(classNameId);
 	}
 
+	public HashSet<String> getUseVariables() {
+		return useVariables;
+	}
+
+	public HashSet<String> getDefVariables() {
+		return defVariables;
+	}
+
 	public boolean hasFalseBranch() {
-		for (CFGEdge e : this.succs) {
+		for (CFGEdge e : this.outEdges) {
 			if (e.label().equals("F"))
 				return true;
 		}
 		return false;
 	}
 
-	public HashSet<CFGEdge> getPreds() {
-		return preds;
+	public HashSet<CFGEdge> getInEdges() {
+		return inEdges;
 	}
 
-	public HashSet<CFGEdge> getSuccs() {
-		return succs;
+	public HashSet<CFGEdge> getOutEdges() {
+		return outEdges;
+	}
+
+	public java.util.ArrayList<CFGNode> getPredecessorsList() {
+		return new java.util.ArrayList<CFGNode>(predecessors);
+	}
+
+	public java.util.ArrayList<CFGNode> getSuccessorsList() {
+		return new java.util.ArrayList<CFGNode>(successors);
+	}
+
+	public void setPredecessors(HashSet<CFGNode> predecessors) {
+		this.predecessors = predecessors;
+	}
+
+	public void setSuccessors(HashSet<CFGNode> successors) {
+		this.successors = successors;
 	}
 
 	public HashSet<CFGNode> getInNodes() {
 		HashSet<CFGNode> nodes = new HashSet<CFGNode>();
-		for (CFGEdge e : preds)
+		for (CFGEdge e : inEdges)
 			nodes.add(e.getSrc());
 		return nodes;
 	}
 
 	public HashSet<CFGNode> getOutNodes() {
 		HashSet<CFGNode> nodes = new HashSet<CFGNode>();
-		for (CFGEdge e : succs)
+		for (CFGEdge e : outEdges)
 			nodes.add(e.getDest());
 		return nodes;
 	}
 
 	public CFGEdge getOutEdge(CFGNode node) {
-		for (CFGEdge e : this.succs) {
+		for (CFGEdge e : this.outEdges) {
 			if (e.getDest() == node)
 				return e;
 		}
@@ -208,7 +269,7 @@ public class CFGNode {
 	}
 
 	public CFGEdge getInEdge(CFGNode node) {
-		for (CFGEdge e : this.preds) {
+		for (CFGEdge e : this.inEdges) {
 			if (e.getSrc() == node)
 				return e;
 		}
@@ -228,11 +289,11 @@ public class CFGNode {
 	}
 
 	public void addInEdge(CFGEdge edge) {
-		preds.add(edge);
+		inEdges.add(edge);
 	}
 
 	public void addOutEdge(CFGEdge edge) {
-		succs.add(edge);
+		outEdges.add(edge);
 	}
 
 	public void setAstNode(Statement stmt) {
@@ -277,5 +338,79 @@ public class CFGNode {
 		default:
 			return CFGNodeType.OTHER;
 		}
+	}
+
+	public HashSet<String> processDef() {
+		HashSet<String> defVar= new HashSet<String>();
+		if(this.expr!=null) {
+			if(this.expr.getKind().toString().equals("VARDECL")) {
+				String[] strComponents = this.expr.getVariableDeclsList().get(0).getName().split("\\.");
+				if(strComponents.length > 1) {
+					defVar.add(strComponents[strComponents.length - 2]);
+				}
+				else {
+					defVar.add(strComponents[0]);
+				}
+			}
+			if(this.expr.getKind().toString().equals("ASSIGN")) {
+				String[] strComponents = this.expr.getExpressionsList().get(0).getVariable().split("\\.");
+				if(strComponents.length > 1) {
+					defVar.add(strComponents[strComponents.length - 2]);
+				}
+				else {
+					defVar.add(strComponents[0]);
+				}
+			}
+		}
+		return defVar;
+	}
+
+	public HashSet<String> processUse() {
+		HashSet<String> useVar= new HashSet<String>();
+		if(this.expr!=null) {
+			if(this.expr.getKind().toString().equals("ASSIGN")) {
+				traverseExpr(useVar, this.rhs);
+			}
+			else {
+				traverseExpr(useVar, this.expr);
+			}
+		}
+		return useVar;
+	}
+
+	public static void traverseExpr(HashSet<String> useVar, final boa.types.Ast.Expression expr) {		
+		if(expr.hasVariable()) {
+			if(expr.getExpressionsList().size()!=0) {
+				useVar.add("this");
+			}
+			else {
+				String[] strComponents = expr.getVariable().split("\\.");
+				if(strComponents.length > 1) {
+					useVar.add(strComponents[strComponents.length - 2]);
+				}
+				else {
+					useVar.add(strComponents[0]);
+				}	
+			}		
+		}
+		for(boa.types.Ast.Expression exprs:expr.getExpressionsList()) {
+			traverseExpr(useVar, exprs);
+		}
+		for(boa.types.Ast.Variable vardecls:expr.getVariableDeclsList()) {
+			traverseVarDecls(useVar, vardecls);
+		}
+		for(boa.types.Ast.Expression methodexpr:expr.getMethodArgsList()) {
+			traverseExpr(useVar, methodexpr);
+		}
+	}
+
+	public static void traverseVarDecls(HashSet<String> useVar, final boa.types.Ast.Variable vardecls) {		
+		if(vardecls.hasInitializer()) {
+			traverseExpr(useVar, vardecls.getInitializer());			
+		}
+	}
+
+	public String toString() {
+		return ""+getId();
 	}
 }
